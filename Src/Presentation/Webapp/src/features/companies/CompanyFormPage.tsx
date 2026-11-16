@@ -122,7 +122,7 @@ export function CompanyFormPage() {
       )}
       <Card>
         <form onSubmit={submit} noValidate>
-          <FormSection title="Profile" description="How this client appears across TalRekrut.">
+          <FormSection title="Profile" description="How this client appears across Talent Pool.">
             <Field label="Company name" required error={errors.name?.message}>
               <Input {...register('name')} />
             </Field>

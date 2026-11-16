@@ -28,5 +28,6 @@ public interface IApplicationService
     Task<ApplicationResponse?> ScheduleInterviewAsync(long id, ScheduleInterviewRequest request, CancellationToken cancellationToken = default);
     Task<ApplicationResponse?> RecordOutcomeAsync(long id, InterviewOutcomeRequest request, CancellationToken cancellationToken = default);
     Task<JobCandidateExport?> GetJobExportAsync(long jobId, CancellationToken cancellationToken = default);
+    Task<PipelineInsightsResponse> GetInsightsAsync(int days, CancellationToken cancellationToken = default);
     Task<PipelineStatsResponse> GetStatsAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
 }

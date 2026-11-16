@@ -9,7 +9,7 @@ export function Logo() {
       <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground shadow-sm">
         T
       </span>
-      <span className="text-[15px] font-semibold tracking-tight">TalRekrut</span>
+      <span className="text-[15px] font-semibold tracking-tight">Talent Pool</span>
     </div>
   )
 }

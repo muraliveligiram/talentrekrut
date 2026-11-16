@@ -107,6 +107,17 @@ public sealed class ApplicationsController(
         return OkOrNotFound(await applicationService.RecordOutcomeAsync(id, request, cancellationToken));
     }
 
+    /// <summary>Selections, submission outcomes and per-recruiter activity over the last <paramref name="days"/> days.</summary>
+    [HttpGet("applications/insights")]
+    [ProducesResponseType(typeof(PipelineInsightsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PipelineInsightsResponse>> GetInsights(
+        [FromQuery] int days = 60,
+        CancellationToken cancellationToken = default)
+    {
+        return Ok(await applicationService.GetInsightsAsync(days, cancellationToken));
+    }
+
     [HttpGet("applications/stats")]
     [ProducesResponseType(typeof(PipelineStatsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

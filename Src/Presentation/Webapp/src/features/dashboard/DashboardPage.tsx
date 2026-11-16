@@ -1,18 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, Briefcase, CalendarClock, PauseCircle, UserSquare2, Users, type LucideIcon } from 'lucide-react'
+import { ArrowRight, Award, Briefcase, CalendarClock, UserSquare2, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { Alert } from '@/components/ui/alert'
 import { ButtonLink } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/features/auth/useAuth'
-import { getPipelineStats } from '@/features/candidates/candidatesApi'
+import { getErrorMessage } from '@/lib/api-error'
+import { getPipelineInsights, getPipelineStats } from '@/features/candidates/candidatesApi'
 import { getJobs } from '@/features/jobs/jobsApi'
 import { JobStatusBadge } from '@/features/jobs/JobStatusBadge'
 import type { JobStatus } from '@/features/jobs/jobTypes'
-import { getUsers } from '@/features/users/usersApi'
 import { formatDate } from '@/lib/utils'
+import { OutcomesCard } from './OutcomesCard'
+import { RecruiterActivityCard } from './RecruiterActivityCard'
+
+const reportingDays = 60
 
 const noFilters = { search: '', companyId: '' }
 
@@ -72,11 +77,9 @@ export function DashboardPage() {
   const { roles, user } = useAuth()
   const isAdmin = roles.includes('Admin')
   const openJobs = useJobCount('Open')
-  const onHoldJobs = useJobCount('OnHold')
-  const activeUsers = useQuery({
-    queryKey: ['users', 'count', 'active'],
-    queryFn: async () => (await getUsers({ search: '', role: '', status: 'active' }, 1, 1)).totalCount,
-    enabled: isAdmin,
+  const insights = useQuery({
+    queryKey: ['applications', 'insights', reportingDays],
+    queryFn: () => getPipelineInsights(reportingDays),
   })
   const pipeline = useQuery({
     queryKey: ['applications', 'stats', 'week'],
@@ -100,11 +103,6 @@ export function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Open jobs" icon={Briefcase} value={openJobs.data} loading={openJobs.isLoading} to="/jobs" />
-        {isAdmin ? (
-          <StatCard label="Active users" icon={Users} value={activeUsers.data} loading={activeUsers.isLoading} to="/users" />
-        ) : (
-          <StatCard label="Jobs on hold" icon={PauseCircle} value={onHoldJobs.data} loading={onHoldJobs.isLoading} to="/jobs" />
-        )}
         <StatCard
           label="Active candidates"
           icon={UserSquare2}
@@ -120,6 +118,29 @@ export function DashboardPage() {
           loading={pipeline.isLoading}
           to="/candidates?stage=InterviewScheduled"
         />
+        <StatCard
+          label="Selected"
+          icon={Award}
+          value={insights.data?.selectedCount}
+          loading={insights.isLoading}
+          hint={`Candidates selected in the last ${reportingDays} days`}
+          to="/candidates?stage=Selected"
+        />
+      </div>
+
+      {insights.isError && <Alert>{getErrorMessage(insights.error, 'Unable to load hiring insights.')}</Alert>}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-2">
+          <OutcomesCard days={reportingDays} outcomes={insights.data?.outcomes} loading={insights.isLoading} />
+        </div>
+        <div className="lg:col-span-3">
+          <RecruiterActivityCard
+            days={reportingDays}
+            recruiters={insights.data?.recruiters}
+            loading={insights.isLoading}
+            isAdmin={isAdmin}
+          />
+        </div>
       </div>
 
       <Card className="overflow-hidden">

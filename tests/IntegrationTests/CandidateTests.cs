@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Applications.Contracts;
 using ClosedXML.Excel;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Domain.Entities;
 using Xunit;
 
@@ -285,6 +287,65 @@ public sealed class CandidateTests
         Assert.Contains("No candidates", emptyWorkbook.Worksheet("Candidates").Cell(2, 1).GetString());
     }
 
+    [Fact]
+    public async Task Insights_report_selections_outcomes_and_recruiter_activity_for_the_window()
+    {
+        await using var env = await Env.CreateAsync();
+        var myJob = await env.CreateOpenJobAsync("Assigned", assignRecruiter: true);
+        var adminJob = await env.CreateOpenJobAsync("Admin only");
+
+        // Recruiter submits three; admin submits one to the recruiter's job and one to their own job.
+        var r1 = await env.CreateCandidateAsync(env.Recruiter, "R1", "r1@mail.test", "9000000041", myJob);
+        var r2 = await env.CreateCandidateAsync(env.Recruiter, "R2", "r2@mail.test", "9000000042", myJob);
+        await env.CreateCandidateAsync(env.Recruiter, "R3", "r3@mail.test", "9000000043", myJob);
+        var a1 = await env.CreateCandidateAsync(env.Admin, "A1", "a1@mail.test", "9000000044", myJob);
+        var a2 = await env.CreateCandidateAsync(env.Admin, "A2", "a2@mail.test", "9000000045", adminJob);
+
+        async Task Step(HttpClient client, long applicationId, string path, object body) =>
+            await env.PostAsync<ApplicationResponse>(client, $"/api/applications/{applicationId}/{path}", body);
+        var soon = DateTimeOffset.UtcNow.AddDays(1);
+
+        // R1: recruiter shortlists, schedules; admin selects.
+        await Step(env.Recruiter, r1.Applications[0].Id, "screening", new { Shortlisted = true });
+        await Step(env.Recruiter, r1.Applications[0].Id, "interview", new { ScheduledAt = soon });
+        await Step(env.Admin, r1.Applications[0].Id, "outcome", new { Selected = true });
+        // R2: recruiter marks not shortlisted.
+        await Step(env.Recruiter, r2.Applications[0].Id, "screening", new { Shortlisted = false });
+        // A1: admin shortlists, interviews, rejects.
+        await Step(env.Admin, a1.Applications[0].Id, "screening", new { Shortlisted = true });
+        await Step(env.Admin, a1.Applications[0].Id, "interview", new { ScheduledAt = soon });
+        await Step(env.Admin, a1.Applications[0].Id, "outcome", new { Selected = false, RejectionReasons = new[] { "CulturalFit" } });
+        // A2 (admin-only job): selected, but submitted and decided 90 days ago - outside the window.
+        await Step(env.Admin, a2.Applications[0].Id, "screening", new { Shortlisted = true });
+        await Step(env.Admin, a2.Applications[0].Id, "interview", new { ScheduledAt = soon });
+        await Step(env.Admin, a2.Applications[0].Id, "outcome", new { Selected = true });
+        await env.BackdateApplicationAsync(a2.Applications[0].Id, days: 90);
+
+        var admin = await env.GetAsync<PipelineInsightsResponse>(env.Admin, "/api/applications/insights?days=60");
+        Assert.Equal(60, admin.Days);
+        Assert.Equal(1, admin.SelectedCount);
+        Assert.Equal(new SubmissionOutcomes(Submitted: 4, InProgress: 1, NotShortlisted: 1, Selected: 1, Rejected: 1), admin.Outcomes);
+
+        var recruiterRow = admin.Recruiters.Single(row => row.Name == "Recruiter Rao");
+        Assert.Equal(new RecruiterActivity(recruiterRow.UserId, "Recruiter Rao",
+            Processed: 3, Submitted: 3, Shortlisted: 1, NotShortlisted: 1, Selected: 0, Rejected: 0), recruiterRow);
+        var adminRow = admin.Recruiters.Single(row => row.Name == "Admin Anand");
+        Assert.Equal((2, 1, 1, 0, 1, 1), (adminRow.Processed, adminRow.Submitted, adminRow.Shortlisted,
+            adminRow.NotShortlisted, adminRow.Selected, adminRow.Rejected));
+        Assert.Equal("Recruiter Rao", admin.Recruiters[0].Name);
+
+        var wider = await env.GetAsync<PipelineInsightsResponse>(env.Admin, "/api/applications/insights?days=120");
+        Assert.Equal(2, wider.SelectedCount);
+        Assert.Equal(5, wider.Outcomes.Submitted);
+
+        // Recruiters only see activity on jobs assigned to them; the admin-only job is excluded.
+        var recruiter = await env.GetAsync<PipelineInsightsResponse>(env.Recruiter, "/api/applications/insights?days=120");
+        Assert.Equal(1, recruiter.SelectedCount);
+        Assert.Equal(4, recruiter.Outcomes.Submitted);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Get, "/api/applications/insights?days=0")).StatusCode);
+    }
+
     private sealed class Env : IAsyncDisposable
     {
         private readonly TestApiFactory _factory;
@@ -386,6 +447,23 @@ public sealed class CandidateTests
             ["linkedInUrl"] = linkedIn ?? "https://www.linkedin.com/in/someone",
             ["notes"] = "Open to relocation"
         };
+
+        /// <summary>Moves an application's submission and every workflow step back in time.</summary>
+        public async Task BackdateApplicationAsync(long applicationId, int days)
+        {
+            await using var scope = _factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<Repository.RekrutDbContext>();
+            var application = await db.JobApplications
+                .Include(item => item.History)
+                .SingleAsync(item => item.Id == applicationId);
+            application.SubmittedAt = application.SubmittedAt.AddDays(-days);
+            foreach (var change in application.History)
+            {
+                change.ChangedAt = change.ChangedAt.AddDays(-days);
+            }
+
+            await db.SaveChangesAsync();
+        }
 
         public Task<HttpResponseMessage> Send(HttpClient client, HttpMethod method, string url, object? body = null)
         {

@@ -52,3 +52,39 @@ public sealed class InterviewOutcomeRequest
 }
 
 public sealed record PipelineStatsResponse(int ActiveCandidates, int InterviewsInRange);
+
+/// <summary>Hiring activity over a trailing window, scoped to what the caller can see.</summary>
+public sealed record PipelineInsightsResponse(
+    int Days,
+    DateTimeOffset From,
+    DateTimeOffset To,
+    int SelectedCount,
+    SubmissionOutcomes Outcomes,
+    IReadOnlyList<RecruiterActivity> Recruiters);
+
+/// <summary>Where the applications submitted during the window stand today.</summary>
+public sealed record SubmissionOutcomes(
+    int Submitted,
+    int InProgress,
+    int NotShortlisted,
+    int Selected,
+    int Rejected);
+
+/// <summary>Workflow steps a user performed during the window.</summary>
+public sealed record RecruiterActivity(
+    long UserId,
+    string Name,
+    int Processed,
+    int Submitted,
+    int Shortlisted,
+    int NotShortlisted,
+    int Selected,
+    int Rejected);
+
+/// <summary>A workflow step, as read for reporting.</summary>
+public sealed record StageEvent(
+    long ApplicationId,
+    ApplicationStage? FromStage,
+    ApplicationStage ToStage,
+    long ChangedByUserId,
+    string ChangedByName);

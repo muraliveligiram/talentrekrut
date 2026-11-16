@@ -134,6 +134,56 @@ public sealed class ApplicationService(
         }, cancellationToken);
     }
 
+    public async Task<PipelineInsightsResponse> GetInsightsAsync(int days, CancellationToken cancellationToken = default)
+    {
+        if (days is < 1 or > 366)
+        {
+            throw new ValidationException("The reporting window must be between 1 and 366 days.");
+        }
+
+        var to = timeProvider.GetUtcNow();
+        var from = to.AddDays(-days);
+        var scope = currentUser.Scope();
+        var events = await repository.GetStageEventsAsync(scope, from, to, cancellationToken);
+        var submissions = await repository.GetStagesOfSubmissionsAsync(scope, from, to, cancellationToken);
+
+        var selectedCount = events
+            .Where(change => change.ToStage == ApplicationStage.Selected)
+            .Select(change => change.ApplicationId)
+            .Distinct()
+            .Count();
+
+        var outcomes = new SubmissionOutcomes(
+            submissions.Count,
+            submissions.Count(ApplicationMapper.IsActive),
+            submissions.Count(stage => stage == ApplicationStage.NotShortlisted),
+            submissions.Count(stage => stage == ApplicationStage.Selected),
+            submissions.Count(stage => stage == ApplicationStage.Rejected));
+
+        int Count(IEnumerable<StageEvent> userEvents, ApplicationStage stage) => userEvents
+            .Where(change => change.ToStage == stage && change.FromStage != stage)
+            .Select(change => change.ApplicationId)
+            .Distinct()
+            .Count();
+
+        var recruiters = events
+            .GroupBy(change => change.ChangedByUserId)
+            .Select(group => new RecruiterActivity(
+                group.Key,
+                group.First().ChangedByName,
+                Processed: group.Select(change => change.ApplicationId).Distinct().Count(),
+                Submitted: group.Where(change => change.FromStage is null).Select(change => change.ApplicationId).Distinct().Count(),
+                Shortlisted: Count(group, ApplicationStage.Shortlisted),
+                NotShortlisted: Count(group, ApplicationStage.NotShortlisted),
+                Selected: Count(group, ApplicationStage.Selected),
+                Rejected: Count(group, ApplicationStage.Rejected)))
+            .OrderByDescending(activity => activity.Processed)
+            .ThenBy(activity => activity.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+
+        return new PipelineInsightsResponse(days, from, to, selectedCount, outcomes, recruiters);
+    }
+
     public async Task<PipelineStatsResponse> GetStatsAsync(
         DateTimeOffset from,
         DateTimeOffset to,

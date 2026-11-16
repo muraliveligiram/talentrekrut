@@ -83,7 +83,7 @@ export function UserListPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Users"
-        description="Manage who can sign in to TalRekrut and what they can access."
+        description="Manage who can sign in to Talent Pool and what they can access."
         actions={
           <Button onClick={openCreate}>
             <UserPlus />

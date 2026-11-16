@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Applications.Abstractions;
+using Applications.Contracts;
 using Applications.Exceptions;
 using Domain.Entities;
 using Microsoft.Data.SqlClient;
@@ -148,6 +149,39 @@ public sealed class CandidateRepository(RekrutDbContext context) : ICandidateRep
                 && application.InterviewScheduledAt < to)
             .CountAsync(cancellationToken);
         return (activeCandidates, interviews);
+    }
+
+    public async Task<IReadOnlyList<StageEvent>> GetStageEventsAsync(
+        AccessScope scope,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default)
+    {
+        var visible = context.JobApplications.Where(ApplicationVisibleTo(scope)).Select(application => application.Id);
+        return await context.ApplicationStageChanges
+            .AsNoTracking()
+            .Where(change => change.ChangedAt >= from && change.ChangedAt < to && visible.Contains(change.JobApplicationId))
+            .Select(change => new StageEvent(
+                change.JobApplicationId,
+                change.FromStage,
+                change.ToStage,
+                change.ChangedByUserId,
+                change.ChangedBy.FullName))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ApplicationStage>> GetStagesOfSubmissionsAsync(
+        AccessScope scope,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default)
+    {
+        return await context.JobApplications
+            .AsNoTracking()
+            .Where(ApplicationVisibleTo(scope))
+            .Where(application => application.SubmittedAt >= from && application.SubmittedAt < to)
+            .Select(application => application.Stage)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task AddAsync(Candidate candidate, CancellationToken cancellationToken = default)

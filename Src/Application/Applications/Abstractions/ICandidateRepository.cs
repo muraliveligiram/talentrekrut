@@ -1,3 +1,4 @@
+using Applications.Contracts;
 using Domain.Entities;
 
 namespace Applications.Abstractions;
@@ -31,6 +32,18 @@ public interface ICandidateRepository
     Task<JobApplication?> GetApplicationAsync(long id, AccessScope scope, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<JobApplication>> GetApplicationsForJobAsync(long jobId, CancellationToken cancellationToken = default);
     Task<(int ActiveCandidates, int InterviewsInRange)> GetStatsAsync(
+        AccessScope scope,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StageEvent>> GetStageEventsAsync(
+        AccessScope scope,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ApplicationStage>> GetStagesOfSubmissionsAsync(
         AccessScope scope,
         DateTimeOffset from,
         DateTimeOffset to,

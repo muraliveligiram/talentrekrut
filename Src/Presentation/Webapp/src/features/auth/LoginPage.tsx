@@ -71,7 +71,7 @@ export function LoginPage() {
           <span className="flex size-8 items-center justify-center rounded-lg bg-white/15 text-sm font-bold ring-1 ring-white/25">
             T
           </span>
-          <span className="text-[15px] font-semibold tracking-tight">TalRekrut</span>
+          <span className="text-[15px] font-semibold tracking-tight">Talent Pool</span>
         </div>
         <div className="relative flex max-w-md flex-col gap-8">
           <h2 className="text-3xl leading-tight font-semibold tracking-tight text-balance">
@@ -88,7 +88,7 @@ export function LoginPage() {
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-white/60">© {new Date().getFullYear()} TalRekrut</p>
+        <p className="relative text-xs text-white/60">© {new Date().getFullYear()} Talent Pool</p>
       </aside>
 
       <main className="flex items-center justify-center px-4 py-12 sm:px-8">

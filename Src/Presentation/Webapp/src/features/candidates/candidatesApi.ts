@@ -80,3 +80,35 @@ export async function exportJobApplications(jobId: string) {
   const fileName = fileNameFromDisposition(response.headers['content-disposition'], `job-${jobId}-candidates.xlsx`)
   return { blob: response.data, fileName }
 }
+
+export interface SubmissionOutcomes {
+  submitted: number
+  inProgress: number
+  notShortlisted: number
+  selected: number
+  rejected: number
+}
+
+export interface RecruiterActivity {
+  userId: number
+  name: string
+  processed: number
+  submitted: number
+  shortlisted: number
+  notShortlisted: number
+  selected: number
+  rejected: number
+}
+
+export interface PipelineInsights {
+  days: number
+  from: string
+  to: string
+  selectedCount: number
+  outcomes: SubmissionOutcomes
+  recruiters: RecruiterActivity[]
+}
+
+export async function getPipelineInsights(days: number) {
+  return (await http.get<PipelineInsights>('/applications/insights', { params: { days } })).data
+}
