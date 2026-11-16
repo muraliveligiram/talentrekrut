@@ -25,6 +25,12 @@ public sealed class JobWriteRequestValidator : AbstractValidator<JobWriteRequest
             .Must(skills => skills is not null
                 && skills.Any(skill => skill.SkillType == JobSkillType.Primary))
             .WithMessage("At least one primary skill is required.");
+        RuleFor(request => request.Skills)
+            .Must(skills => skills is null || skills.Select(skill => skill.SkillId).Distinct().Count() == skills.Count)
+            .WithMessage("Each skill can only be added once.");
+        RuleFor(request => request.Skills)
+            .Must(skills => skills is null || skills.Count <= 50)
+            .WithMessage("A job can have at most 50 skills.");
         RuleForEach(request => request.Skills).SetValidator(new JobSkillWriteRequestValidator());
     }
 
@@ -32,7 +38,7 @@ public sealed class JobWriteRequestValidator : AbstractValidator<JobWriteRequest
     {
         public JobSkillWriteRequestValidator()
         {
-            RuleFor(skill => skill.SkillName).NotEmpty().MaximumLength(100);
+            RuleFor(skill => skill.SkillId).GreaterThan(0);
             RuleFor(skill => skill.SkillType).IsInEnum();
             RuleFor(skill => skill.MinYears).GreaterThanOrEqualTo(0);
         }

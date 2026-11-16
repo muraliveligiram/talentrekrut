@@ -6,6 +6,7 @@ CREATE TABLE [dbo].[Users]
     [FullName] NVARCHAR(200) NOT NULL,
     [PasswordHash] NVARCHAR(500) NOT NULL,
     [IsActive] BIT NOT NULL,
+    [LastLoginAt] DATETIMEOFFSET NULL,
     [CreatedAt] DATETIMEOFFSET NOT NULL,
     [CreatedBy] NVARCHAR(200) NULL,
     [UpdatedAt] DATETIMEOFFSET NULL,

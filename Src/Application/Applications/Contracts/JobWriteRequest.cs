@@ -19,7 +19,7 @@ public sealed class JobWriteRequest
 
 public sealed class JobSkillWriteRequest
 {
-    public string SkillName { get; set; } = string.Empty;
+    public long SkillId { get; set; }
     public JobSkillType SkillType { get; set; }
     public decimal? MinYears { get; set; }
 }

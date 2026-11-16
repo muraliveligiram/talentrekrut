@@ -1,11 +1,20 @@
 import { jwtDecode } from 'jwt-decode'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loginRequest, type LoginCredentials } from './authApi'
-import { AuthContext, type AuthContextValue } from './authContext'
+import { AuthContext, type AuthContextValue, type CurrentUser } from './authContext'
 import { tokenStore } from './tokenStore'
+
+const claimTypes = {
+  id: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier',
+  name: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name',
+  email: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+} as const
 
 interface TokenClaims {
   exp?: number
+  [claimTypes.id]?: string
+  [claimTypes.name]?: string
+  [claimTypes.email]?: string
   role?: string | string[]
   roles?: string | string[]
   'http://schemas.microsoft.com/ws/2008/06/identity/claims/role'?: string | string[]
@@ -40,6 +49,18 @@ function getRoles(claims: TokenClaims | null): string[] {
   return roleClaims ?? []
 }
 
+function getUser(claims: TokenClaims | null): CurrentUser | null {
+  if (!claims) {
+    return null
+  }
+  const email = claims[claimTypes.email] ?? ''
+  return {
+    id: Number(claims[claimTypes.id] ?? 0),
+    name: claims[claimTypes.name] || email || 'User',
+    email,
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState(() => tokenStore.get())
 
@@ -60,18 +81,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(tokenResponse.accessToken)
   }, [])
 
-  const claims = getTokenClaims(accessToken)
-  const roles = getRoles(claims)
-  const value = useMemo<AuthContextValue>(
-    () => ({
+  const value = useMemo<AuthContextValue>(() => {
+    const claims = getTokenClaims(accessToken)
+    return {
       accessToken: claims ? accessToken : null,
       isAuthenticated: claims !== null,
-      roles,
+      roles: getRoles(claims),
+      user: getUser(claims),
       login,
       logout,
-    }),
-    [accessToken, claims, login, logout, roles],
-  )
+    }
+  }, [accessToken, login, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

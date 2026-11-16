@@ -62,6 +62,44 @@ public sealed class AuthTests
         Assert.Equal("test-token", result.AccessToken);
     }
 
+    [Fact]
+    public async Task Login_rejects_wrong_password()
+    {
+        using var factory = new TestApiFactory();
+        using var client = factory.CreateClient();
+        await factory.SeedUserAsync("admin@example.test", "Test Administrator", RoleNames.Admin);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { Email = "admin@example.test", Password = "not-the-password" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(true, "wrong")]
+    [InlineData(false, "correct")]
+    public async Task Login_returns_null_for_wrong_password_or_inactive_user(bool isActive, string password)
+    {
+        var user = new User
+        {
+            Id = 1,
+            Email = "admin@example.test",
+            NormalizedEmail = "ADMIN@EXAMPLE.TEST",
+            FullName = "Admin",
+            PasswordHash = "correct",
+            IsActive = isActive
+        };
+        var service = new AuthService(
+            new FakeAuthUserRepository(user),
+            new FakePasswordHashService(),
+            new FakeTokenGenerator());
+
+        var result = await service.LoginAsync("admin@example.test", password);
+
+        Assert.Null(result);
+    }
+
     private sealed class FakeAuthUserRepository(User? user) : IAuthUserRepository
     {
         public string? LastNormalizedEmail { get; private set; }
@@ -79,6 +117,15 @@ public sealed class AuthTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<string>>(["Admin"]);
+        }
+
+        public Task RecordLoginAsync(
+            User user,
+            DateTimeOffset loggedInAt,
+            CancellationToken cancellationToken = default)
+        {
+            user.LastLoginAt = loggedInAt;
+            return Task.CompletedTask;
         }
     }
 

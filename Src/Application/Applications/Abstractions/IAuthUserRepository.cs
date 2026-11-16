@@ -11,4 +11,6 @@ public interface IAuthUserRepository
     Task<IReadOnlyList<string>> GetRoleNamesAsync(
         long userId,
         CancellationToken cancellationToken = default);
+
+    Task RecordLoginAsync(User user, DateTimeOffset loggedInAt, CancellationToken cancellationToken = default);
 }

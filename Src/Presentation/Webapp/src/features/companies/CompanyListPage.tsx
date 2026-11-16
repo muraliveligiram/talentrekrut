@@ -1,175 +1,203 @@
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  Link,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TablePagination,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Building2, Eye, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
-import { useDeleteCompany, useCompanies } from './useCompanies'
+import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
+import { Alert } from '@/components/ui/alert'
+import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button, ButtonLink } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/ui/page-header'
+import { Pagination } from '@/components/ui/pagination'
+import { SearchInput } from '@/components/ui/search-input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { getErrorMessage } from '@/lib/api-error'
+import { useDebouncedValue } from '@/lib/hooks'
+import type { Company } from './companyTypes'
+import { useCompanies, useDeleteCompany } from './useCompanies'
 
 const pageSize = 10
 
 export function CompanyListPage() {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(0)
-  const [companyToDelete, setCompanyToDelete] = useState<{ id: number; name: string } | null>(null)
-  const companiesQuery = useCompanies(search, page + 1, pageSize)
+  const [page, setPage] = useState(1)
+  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null)
+  const debouncedSearch = useDebouncedValue(search)
+  const companiesQuery = useCompanies(debouncedSearch, page, pageSize)
   const deleteCompany = useDeleteCompany()
+  const companies = companiesQuery.data?.items ?? []
 
-  const confirmDelete = () => {
-    if (!companyToDelete) {
-      return
+  const confirmDelete = async () => {
+    if (!companyToDelete) return
+    try {
+      await deleteCompany.mutateAsync(companyToDelete.id)
+      toast.success('Company deleted', { description: companyToDelete.name })
+      setCompanyToDelete(null)
+    } catch {
+      // Error shown inside the dialog.
     }
-    deleteCompany.mutate(companyToDelete.id, {
-      onSuccess: () => setCompanyToDelete(null),
-    })
   }
 
   return (
-    <Stack spacing={2.5}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-        <Box>
-          <Typography variant="h4" component="h1" fontWeight={700}>
-            Companies
-          </Typography>
-          <Typography color="text.secondary">Manage organization profiles.</Typography>
-        </Box>
-        <Button component={RouterLink} to="/companies/new" variant="contained">
-          Add company
-        </Button>
-      </Box>
-
-      <TextField
-        label="Search companies"
-        value={search}
-        onChange={(event) => {
-          setSearch(event.target.value)
-          setPage(0)
-        }}
-        sx={{ maxWidth: 420 }}
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Companies"
+        description="Client organizations you recruit for."
+        actions={
+          <ButtonLink to="/companies/new">
+            <Plus />
+            Add company
+          </ButtonLink>
+        }
       />
 
-      {companiesQuery.isError && (
-        <Alert severity="error">Unable to load companies. Please try again.</Alert>
-      )}
-      {deleteCompany.isError && (
-        <Alert severity="error">Unable to delete the company. It may have active jobs.</Alert>
-      )}
-      <Paper variant="outlined">
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Company</TableCell>
-              <TableCell>Industry</TableCell>
-              <TableCell>Contact</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {companiesQuery.isLoading ? (
-              <TableRow>
-                <TableCell colSpan={5}>Loading companies…</TableCell>
-              </TableRow>
-            ) : companiesQuery.data?.items.length ? (
-              companiesQuery.data.items.map((company) => (
-                <TableRow key={company.id} hover>
-                  <TableCell>
-                    <Link component={RouterLink} to={`/companies/${company.id}`} underline="hover">
-                      {company.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{company.industry || '—'}</TableCell>
-                  <TableCell>{company.contactPersonName || company.contactEmail || '—'}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      color={company.isActive ? 'success' : 'default'}
-                      label={company.isActive ? 'Active' : 'Inactive'}
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      aria-label={`View ${company.name}`}
-                      component={RouterLink}
-                      to={`/companies/${company.id}`}
-                    >
-                      <VisibilityOutlinedIcon />
-                    </IconButton>
-                    <IconButton
-                      aria-label={`Edit ${company.name}`}
-                      component={RouterLink}
-                      to={`/companies/${company.id}/edit`}
-                    >
-                      <EditOutlinedIcon />
-                    </IconButton>
-                    <IconButton
-                      aria-label={`Delete ${company.name}`}
-                      onClick={() => setCompanyToDelete({ id: company.id, name: company.name })}
-                    >
-                      <DeleteOutlineIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={5}>
-                  {search ? 'No companies match your search.' : 'No companies have been added yet.'}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        <TablePagination
-          component="div"
-          count={companiesQuery.data?.totalCount ?? 0}
-          page={page}
-          rowsPerPage={pageSize}
-          rowsPerPageOptions={[pageSize]}
-          onPageChange={(_, nextPage) => setPage(nextPage)}
-        />
-      </Paper>
+      <Card className="overflow-hidden">
+        <div className="border-b p-4 sm:px-6">
+          <SearchInput
+            aria-label="Search companies"
+            placeholder="Search companies…"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+            className="sm:max-w-xs"
+          />
+        </div>
 
-      <Dialog open={companyToDelete !== null} onClose={() => setCompanyToDelete(null)}>
-        <DialogTitle>Delete company?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {companyToDelete?.name} will be hidden from company lists. This cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCompanyToDelete(null)}>Cancel</Button>
-          <Button
-            color="error"
-            onClick={confirmDelete}
-            disabled={deleteCompany.isPending}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Stack>
+        {companiesQuery.isError ? (
+          <div className="p-6">
+            <Alert title="Unable to load companies">{getErrorMessage(companiesQuery.error, 'Please try again.')}</Alert>
+          </div>
+        ) : !companiesQuery.isLoading && companies.length === 0 ? (
+          <EmptyState
+            icon={Building2}
+            title={search ? 'No matching companies' : 'No companies yet'}
+            description={search ? 'Try a different search term.' : 'Add your first client company to start creating jobs.'}
+            action={
+              !search && (
+                <ButtonLink to="/companies/new" size="sm">
+                  <Plus />
+                  Add company
+                </ButtonLink>
+              )
+            }
+          />
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Company</TableHead>
+                  <TableHead className="hidden md:table-cell">Location</TableHead>
+                  <TableHead className="hidden lg:table-cell">Contact</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-12">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {companiesQuery.isLoading
+                  ? Array.from({ length: 4 }, (_, index) => (
+                      <TableRow key={index}>
+                        <TableCell colSpan={5}>
+                          <Skeleton className="h-8 w-full" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  : companies.map((company) => (
+                      <TableRow key={company.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar name={company.name} className="rounded-lg" />
+                            <div className="flex min-w-0 flex-col">
+                              <Link to={`/companies/${company.id}`} className="truncate font-medium hover:underline">
+                                {company.name}
+                              </Link>
+                              <span className="truncate text-xs text-muted">{company.industry || 'No industry set'}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden text-muted md:table-cell">
+                          {[company.city, company.country].filter(Boolean).join(', ') || '—'}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <div className="flex flex-col">
+                            <span>{company.contactPersonName || '—'}</span>
+                            {company.contactEmail && <span className="text-xs text-muted">{company.contactEmail}</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge tone={company.isActive ? 'success' : 'neutral'} dot>
+                            {company.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${company.name}`}>
+                                <MoreHorizontal />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              <DropdownMenuItem onSelect={() => navigate(`/companies/${company.id}`)}>
+                                <Eye />
+                                View
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => navigate(`/companies/${company.id}/edit`)}>
+                                <Pencil />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                tone="danger"
+                                onSelect={() => {
+                                  deleteCompany.reset()
+                                  setCompanyToDelete(company)
+                                }}
+                              >
+                                <Trash2 />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={companiesQuery.data?.totalCount ?? 0}
+              onPageChange={setPage}
+            />
+          </>
+        )}
+      </Card>
+
+      <ConfirmDialog
+        open={companyToDelete !== null}
+        onOpenChange={(open) => !open && setCompanyToDelete(null)}
+        title="Delete company?"
+        description={`${companyToDelete?.name} will be removed from company lists. Companies with active jobs cannot be deleted.`}
+        confirmLabel="Delete company"
+        loading={deleteCompany.isPending}
+        error={deleteCompany.isError ? getErrorMessage(deleteCompany.error, 'Unable to delete the company.') : null}
+        onConfirm={confirmDelete}
+      />
+    </div>
   )
 }

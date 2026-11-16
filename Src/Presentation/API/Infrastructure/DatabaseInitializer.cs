@@ -7,6 +7,8 @@ namespace API.Infrastructure;
 
 public static class DatabaseInitializer
 {
+    private const int MinimumSeedPasswordLength = 12;
+
     public static async Task InitializeDatabaseAsync(
         this IServiceProvider services,
         IConfiguration configuration,
@@ -18,11 +20,6 @@ public static class DatabaseInitializer
         {
             throw new InvalidOperationException(
                 "SeedAdmin:Email and SeedAdmin:Password must be configured before starting the API.");
-        }
-
-        if (adminPassword.Length < 5)
-        {
-            throw new InvalidOperationException("The seed administrator password must be at least 12 characters.");
         }
 
         await using var scope = services.CreateAsyncScope();
@@ -52,6 +49,12 @@ public static class DatabaseInitializer
             cancellationToken);
         if (admin is null)
         {
+            if (adminPassword.Length < MinimumSeedPasswordLength)
+            {
+                throw new InvalidOperationException(
+                    $"The seed administrator password must be at least {MinimumSeedPasswordLength} characters.");
+            }
+
             admin = new User
             {
                 Email = adminEmail,

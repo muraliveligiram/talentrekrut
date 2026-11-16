@@ -23,7 +23,9 @@ public sealed record JobResponse(
 
 public sealed record JobSkillResponse(
     long Id,
+    long SkillId,
     string SkillName,
+    SkillCategory Category,
     JobSkillType SkillType,
     decimal? MinYears);
 

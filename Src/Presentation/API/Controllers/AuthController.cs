@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Applications.Abstractions;
+using Applications.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,7 +9,7 @@ namespace API.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class AuthController(IAuthService authService) : ControllerBase
+public sealed class AuthController(IAuthService authService, IUserService userService) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("login")]
@@ -40,6 +41,20 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
             Email = User.FindFirstValue(ClaimTypes.Email),
             Roles = User.FindAll(ClaimTypes.Role).Select(claim => claim.Value)
         });
+    }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        return await userService.ChangeOwnPasswordAsync(request, cancellationToken)
+            ? NoContent()
+            : Unauthorized();
     }
 
     public sealed record LoginRequest(

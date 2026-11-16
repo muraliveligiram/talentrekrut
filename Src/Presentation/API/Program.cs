@@ -12,7 +12,7 @@ builder.Services.AddApiServices(builder.Configuration);
 var app = builder.Build();
 if (!app.Environment.IsEnvironment("Testing"))
 {
-   // await app.Services.InitializeDatabaseAsync(builder.Configuration);
+    await app.Services.InitializeDatabaseAsync(builder.Configuration);
 }
 
 app.UseApiMiddlewares();

@@ -60,6 +60,7 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
             .Take(pageSize)
             .Include(job => job.Company)
             .Include(job => job.Skills)
+                .ThenInclude(jobSkill => jobSkill.Skill)
             .Include(job => job.Assignments.Where(assignment => assignment.IsActive))
                 .ThenInclude(assignment => assignment.Recruiter)
             .ToListAsync(cancellationToken);
@@ -75,6 +76,7 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
         var query = context.Jobs
             .Include(job => job.Company)
             .Include(job => job.Skills)
+                .ThenInclude(jobSkill => jobSkill.Skill)
             .Include(job => job.Assignments.Where(assignment => assignment.IsActive))
                 .ThenInclude(assignment => assignment.Recruiter)
             .AsQueryable();
@@ -138,17 +140,6 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
             cancellationToken);
     }
 
-    public async Task<IReadOnlyList<RecruiterOption>> GetRecruitersAsync(
-        CancellationToken cancellationToken = default)
-    {
-        return await context.Users
-            .Where(user => user.IsActive
-                && user.UserRoles.Any(userRole => userRole.Role.Name == RoleNames.Recruiter))
-            .OrderBy(user => user.FullName)
-            .Select(user => new RecruiterOption(user.Id, user.FullName, user.Email))
-            .ToListAsync(cancellationToken);
-    }
-
     public async Task<int> GetNextJobNumberAsync(
         int year,
         CancellationToken cancellationToken = default)
@@ -164,6 +155,15 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
             .DefaultIfEmpty(0)
             .Max();
         return checked(maxNumber + 1);
+    }
+
+    public async Task<IReadOnlyDictionary<long, Skill>> GetSkillsAsync(
+        IReadOnlyCollection<long> skillIds,
+        CancellationToken cancellationToken = default)
+    {
+        return await context.Skills
+            .Where(skill => skillIds.Contains(skill.Id))
+            .ToDictionaryAsync(skill => skill.Id, cancellationToken);
     }
 
     public async Task AddAsync(Job job, CancellationToken cancellationToken = default)

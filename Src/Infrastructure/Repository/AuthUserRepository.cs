@@ -24,4 +24,13 @@ public sealed class AuthUserRepository(RekrutDbContext context) : IAuthUserRepos
             .OrderBy(name => name)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task RecordLoginAsync(
+        User user,
+        DateTimeOffset loggedInAt,
+        CancellationToken cancellationToken = default)
+    {
+        user.LastLoginAt = loggedInAt;
+        await context.SaveChangesAsync(cancellationToken);
+    }
 }

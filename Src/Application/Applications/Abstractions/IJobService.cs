@@ -28,5 +28,4 @@ public interface IJobService
         long jobId,
         long recruiterUserId,
         CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RecruiterOption>> GetRecruitersAsync(CancellationToken cancellationToken = default);
 }

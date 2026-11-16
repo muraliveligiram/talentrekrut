@@ -1,179 +1,207 @@
-import AddIcon from '@mui/icons-material/Add'
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
-import {
-  Alert,
-  Box,
-  Button,
-  FormControl,
-  InputLabel,
-  Link,
-  MenuItem,
-  Paper,
-  Select,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TablePagination,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Briefcase, MapPin, Plus } from 'lucide-react'
 import { useState } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
-import { useCompanies } from '../companies/useCompanies'
-import { useAuth } from '../auth/useAuth'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Alert } from '@/components/ui/alert'
+import { Avatar } from '@/components/ui/avatar'
+import { ButtonLink } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Select } from '@/components/ui/input'
+import { PageHeader } from '@/components/ui/page-header'
+import { Pagination } from '@/components/ui/pagination'
+import { SearchInput } from '@/components/ui/search-input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useAuth } from '@/features/auth/useAuth'
+import { useCompanies } from '@/features/companies/useCompanies'
+import { getErrorMessage } from '@/lib/api-error'
+import { useDebouncedValue } from '@/lib/hooks'
+import { formatDate, humanize } from '@/lib/utils'
+import { JOB_STATUSES } from './jobStatus'
+import { JobStatusBadge } from './JobStatusBadge'
 import type { JobStatus } from './jobTypes'
 import { useJobs } from './useJobs'
 
 const pageSize = 10
-const statuses: JobStatus[] = ['Draft', 'Open', 'OnHold', 'Closed']
 
 export function JobListPage() {
+  const [searchParams] = useSearchParams()
   const [search, setSearch] = useState('')
-  const [companyId, setCompanyId] = useState('')
+  const [companyId, setCompanyId] = useState(searchParams.get('companyId') ?? '')
   const [status, setStatus] = useState<JobStatus | ''>('')
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(1)
   const { roles } = useAuth()
   const isAdmin = roles.includes('Admin')
   const companiesQuery = useCompanies('', 1, 100)
-  const jobsQuery = useJobs({ search, companyId, status }, page + 1, pageSize)
+  const debouncedSearch = useDebouncedValue(search)
+  const jobsQuery = useJobs({ search: debouncedSearch, companyId, status }, page, pageSize)
+  const jobs = jobsQuery.data?.items ?? []
+  const hasFilters = Boolean(search || companyId || status)
 
   return (
-    <Stack spacing={2.5}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-        <Box>
-          <Typography variant="h4" component="h1" fontWeight={700}>
-            Jobs
-          </Typography>
-          <Typography color="text.secondary">
-            {isAdmin ? 'Manage job postings and recruiter assignments.' : 'Jobs assigned to you.'}
-          </Typography>
-        </Box>
-        {isAdmin && (
-          <Button component={RouterLink} to="/jobs/new" variant="contained" startIcon={<AddIcon />}>
-            Add job
-          </Button>
-        )}
-      </Box>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Jobs"
+        description={isAdmin ? 'Job requirements and recruiter assignments.' : 'Jobs assigned to you.'}
+        actions={
+          isAdmin && (
+            <ButtonLink to="/jobs/new">
+              <Plus />
+              Add job
+            </ButtonLink>
+          )
+        }
+      />
 
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <TextField
-          label="Search jobs"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value)
-            setPage(0)
-          }}
-          sx={{ flex: 1 }}
-        />
-        <FormControl sx={{ minWidth: 220 }}>
-          <InputLabel id="company-filter-label">Company</InputLabel>
-          <Select
-            labelId="company-filter-label"
-            label="Company"
-            value={companyId}
+      <Card className="overflow-hidden">
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:px-6">
+          <SearchInput
+            aria-label="Search jobs"
+            placeholder="Search title, code or location…"
+            value={search}
             onChange={(event) => {
-              setCompanyId(event.target.value)
-              setPage(0)
+              setSearch(event.target.value)
+              setPage(1)
             }}
-          >
-            <MenuItem value="">All companies</MenuItem>
-            {(companiesQuery.data?.items ?? []).map((company) => (
-              <MenuItem key={company.id} value={company.id}>
-                {company.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl sx={{ minWidth: 180 }}>
-          <InputLabel id="status-filter-label">Status</InputLabel>
-          <Select
-            labelId="status-filter-label"
-            label="Status"
-            value={status}
-            onChange={(event) => {
-              setStatus(event.target.value as JobStatus | '')
-              setPage(0)
-            }}
-          >
-            <MenuItem value="">All statuses</MenuItem>
-            {statuses.map((value) => (
-              <MenuItem key={value} value={value}>
-                {value}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Stack>
+            className="sm:max-w-xs sm:flex-1"
+          />
+          <div className="flex gap-3">
+            <Select
+              aria-label="Filter by company"
+              value={companyId}
+              onChange={(event) => {
+                setCompanyId(event.target.value)
+                setPage(1)
+              }}
+              className="flex-1 sm:w-48"
+            >
+              <option value="">All companies</option>
+              {(companiesQuery.data?.items ?? []).map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              aria-label="Filter by status"
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value as JobStatus | '')
+                setPage(1)
+              }}
+              className="flex-1 sm:w-40"
+            >
+              <option value="">All statuses</option>
+              {JOB_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {humanize(value)}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
 
-      {companiesQuery.isError && <Alert severity="error">Unable to load the company filter options.</Alert>}
-      {jobsQuery.isError && <Alert severity="error">Unable to load jobs. Please try again.</Alert>}
-      <Paper variant="outlined">
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Job</TableCell>
-              <TableCell>Company</TableCell>
-              <TableCell>Location</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Openings</TableCell>
-              <TableCell align="right">View</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {jobsQuery.isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6}>Loading jobs…</TableCell>
-              </TableRow>
-            ) : jobsQuery.data?.items.length ? (
-              jobsQuery.data.items.map((job) => (
-                <TableRow key={job.id} hover>
-                  <TableCell>
-                    <Link component={RouterLink} to={`/jobs/${job.id}`} underline="hover">
-                      <Typography fontWeight={600}>{job.title}</Typography>
-                    </Link>
-                    <Typography variant="caption" color="text.secondary">
-                      {job.jobCode}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{job.companyName}</TableCell>
-                  <TableCell>{job.location || '—'}</TableCell>
-                  <TableCell>{job.status}</TableCell>
-                  <TableCell align="right">{job.openings}</TableCell>
-                  <TableCell align="right">
-                    <Button
-                      component={RouterLink}
-                      to={`/jobs/${job.id}`}
-                      aria-label={`View ${job.title}`}
-                      size="small"
-                    >
-                      <VisibilityOutlinedIcon />
-                    </Button>
-                  </TableCell>
+        {jobsQuery.isError ? (
+          <div className="p-6">
+            <Alert title="Unable to load jobs">{getErrorMessage(jobsQuery.error, 'Please try again.')}</Alert>
+          </div>
+        ) : !jobsQuery.isLoading && jobs.length === 0 ? (
+          <EmptyState
+            icon={Briefcase}
+            title={hasFilters ? 'No matching jobs' : 'No jobs yet'}
+            description={
+              hasFilters
+                ? 'Try different filters.'
+                : isAdmin
+                  ? 'Create a job to start tracking a requirement.'
+                  : 'Jobs assigned to you will appear here.'
+            }
+            action={
+              isAdmin &&
+              !hasFilters && (
+                <ButtonLink to="/jobs/new" size="sm">
+                  <Plus />
+                  Add job
+                </ButtonLink>
+              )
+            }
+          />
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Job</TableHead>
+                  <TableHead className="hidden md:table-cell">Company</TableHead>
+                  <TableHead className="hidden lg:table-cell">Location</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Openings</TableHead>
+                  <TableHead className="hidden xl:table-cell">Recruiters</TableHead>
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6}>
-                  {search || companyId || status
-                    ? 'No jobs match these filters.'
-                    : 'No jobs have been assigned or created yet.'}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        <TablePagination
-          component="div"
-          count={jobsQuery.data?.totalCount ?? 0}
-          page={page}
-          rowsPerPage={pageSize}
-          rowsPerPageOptions={[pageSize]}
-          onPageChange={(_, nextPage) => setPage(nextPage)}
-        />
-      </Paper>
-    </Stack>
+              </TableHeader>
+              <TableBody>
+                {jobsQuery.isLoading
+                  ? Array.from({ length: 4 }, (_, index) => (
+                      <TableRow key={index}>
+                        <TableCell colSpan={6}>
+                          <Skeleton className="h-8 w-full" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  : jobs.map((job) => (
+                      <TableRow key={job.id}>
+                        <TableCell>
+                          <div className="flex min-w-0 flex-col">
+                            <Link to={`/jobs/${job.id}`} className="truncate font-medium hover:underline">
+                              {job.title}
+                            </Link>
+                            <span className="text-xs text-muted">
+                              {job.jobCode} · {formatDate(job.createdAt)}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{job.companyName}</TableCell>
+                        <TableCell className="hidden text-muted lg:table-cell">
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="size-3.5" />
+                            {job.location || '—'} · {humanize(job.workMode)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <JobStatusBadge status={job.status} />
+                        </TableCell>
+                        <TableCell className="hidden text-right tabular-nums sm:table-cell">{job.openings}</TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          {job.assignments.length ? (
+                            <div className="flex -space-x-2">
+                              {job.assignments.slice(0, 4).map((assignment) => (
+                                <span key={assignment.recruiterUserId} title={assignment.recruiterName}>
+                                  <Avatar name={assignment.recruiterName} className="size-7 ring-2 ring-surface" />
+                                </span>
+                              ))}
+                              {job.assignments.length > 4 && (
+                                <span className="flex size-7 items-center justify-center rounded-full bg-surface-muted text-[10px] font-medium ring-2 ring-surface">
+                                  +{job.assignments.length - 4}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted">Unassigned</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+              </TableBody>
+            </Table>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={jobsQuery.data?.totalCount ?? 0}
+              onPageChange={setPage}
+            />
+          </>
+        )}
+      </Card>
+    </div>
   )
 }

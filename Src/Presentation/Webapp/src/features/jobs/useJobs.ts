@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   assignRecruiter,
   createJob,
@@ -19,6 +19,7 @@ export function useJobs(
   return useQuery({
     queryKey: ['jobs', filters, page, pageSize],
     queryFn: () => getJobs(filters, page, pageSize),
+    placeholderData: keepPreviousData,
   })
 }
 

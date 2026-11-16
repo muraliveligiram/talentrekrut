@@ -39,7 +39,7 @@ export async function updateJobStatus(id: string, status: JobStatus) {
 }
 
 export async function getRecruiters() {
-  const response = await http.get<Recruiter[]>('/users', { params: { role: 'Recruiter' } })
+  const response = await http.get<Recruiter[]>('/users/recruiters')
   return response.data
 }
 

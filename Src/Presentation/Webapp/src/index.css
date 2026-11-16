@@ -1,24 +1,125 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Components use semantic names (bg-surface, text-muted, border-border ...)
+ * so light and dark themes only differ here.
+ */
 :root {
-  font-family: Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: #1c2534;
-  background: #f5f7fb;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --background: oklch(0.985 0.002 247);
+  --surface: oklch(1 0 0);
+  --surface-muted: oklch(0.967 0.003 265);
+  --foreground: oklch(0.21 0.03 265);
+  --muted: oklch(0.55 0.02 265);
+  --border: oklch(0.92 0.006 265);
+  --input: oklch(0.88 0.008 265);
+  --ring: oklch(0.55 0.2 270);
+  --primary: oklch(0.51 0.21 270);
+  --primary-hover: oklch(0.46 0.21 270);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-soft: oklch(0.95 0.03 270);
+  --primary-soft-foreground: oklch(0.42 0.18 270);
+  --danger: oklch(0.58 0.22 25);
+  --danger-hover: oklch(0.52 0.22 25);
+  --danger-soft: oklch(0.96 0.03 25);
+  --danger-soft-foreground: oklch(0.47 0.19 25);
+  --success-soft: oklch(0.96 0.04 155);
+  --success-soft-foreground: oklch(0.45 0.12 155);
+  --warning-soft: oklch(0.97 0.05 85);
+  --warning-soft-foreground: oklch(0.5 0.12 65);
+  --sidebar: oklch(0.99 0.002 265);
 }
 
-* {
-  box-sizing: border-box;
+.dark {
+  --background: oklch(0.16 0.012 265);
+  --surface: oklch(0.2 0.014 265);
+  --surface-muted: oklch(0.24 0.015 265);
+  --foreground: oklch(0.96 0.005 265);
+  --muted: oklch(0.7 0.015 265);
+  --border: oklch(0.29 0.015 265);
+  --input: oklch(0.34 0.016 265);
+  --ring: oklch(0.68 0.16 270);
+  --primary: oklch(0.62 0.19 270);
+  --primary-hover: oklch(0.67 0.18 270);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-soft: oklch(0.3 0.07 270);
+  --primary-soft-foreground: oklch(0.85 0.08 270);
+  --danger: oklch(0.63 0.2 25);
+  --danger-hover: oklch(0.68 0.19 25);
+  --danger-soft: oklch(0.3 0.08 25);
+  --danger-soft-foreground: oklch(0.85 0.08 25);
+  --success-soft: oklch(0.3 0.06 155);
+  --success-soft-foreground: oklch(0.85 0.1 155);
+  --warning-soft: oklch(0.32 0.06 75);
+  --warning-soft-foreground: oklch(0.88 0.1 85);
+  --sidebar: oklch(0.18 0.013 265);
 }
 
-body {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-foreground: var(--danger-soft-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-sidebar: var(--sidebar);
 }
 
-button,
-input {
-  font: inherit;
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply min-h-screen bg-background font-sans text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  *,
+  ::before,
+  ::after {
+    @apply border-border;
+  }
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes content-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@utility animate-overlay-in {
+  animation: overlay-in 150ms ease-out;
+}
+@utility animate-content-in {
+  animation: content-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@utility animate-slide-in-left {
+  animation: slide-in-left 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }

@@ -1,20 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import {
-  Alert,
-  Box,
-  Button,
-  Checkbox,
-  FormControlLabel,
-  Grid,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
 import { useEffect } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { z } from 'zod'
+import { Alert } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardFooter } from '@/components/ui/card'
+import { Field } from '@/components/ui/field'
+import { FormSection } from '@/components/ui/form-section'
+import { Checkbox, Input, Textarea } from '@/components/ui/input'
+import { PageHeader } from '@/components/ui/page-header'
+import { PageLoader } from '@/components/ui/spinner'
+import { getErrorMessage } from '@/lib/api-error'
 import { useCompany, useSaveCompany } from './useCompanies'
 
 const optionalHttpUrl = z
@@ -64,7 +62,6 @@ export function CompanyFormPage() {
   const companyQuery = useCompany(id ?? '', Boolean(id))
   const saveCompany = useSaveCompany(id)
   const {
-    control,
     register,
     reset,
     handleSubmit,
@@ -97,113 +94,96 @@ export function CompanyFormPage() {
 
   const submit = handleSubmit((values) => {
     saveCompany.mutate(values, {
-      onSuccess: (company) => navigate(`/companies/${company.id}`),
+      onSuccess: (company) => {
+        toast.success(id ? 'Company updated' : 'Company created', { description: company.name })
+        navigate(`/companies/${company.id}`)
+      },
     })
   })
 
   if (id && companyQuery.isLoading) {
-    return <Typography>Loading company…</Typography>
+    return <PageLoader label="Loading company…" />
   }
   if (id && (companyQuery.isError || !companyQuery.data)) {
-    return <Alert severity="error">Unable to load this company.</Alert>
+    return <Alert title="Unable to load this company">It may have been deleted.</Alert>
   }
 
+  const backTo = id ? `/companies/${id}` : '/companies'
+
   return (
-    <Stack spacing={2}>
-      <Box>
-        <Typography variant="h4" component="h1" fontWeight={700}>
-          {id ? 'Edit company' : 'Add company'}
-        </Typography>
-        <Typography color="text.secondary">Enter organization and contact details.</Typography>
-      </Box>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        back={{ to: backTo, label: id ? 'Back to company' : 'Companies' }}
+        title={id ? 'Edit company' : 'Add company'}
+        description="Organization profile and the primary contact for this client."
+      />
       {saveCompany.isError && (
-        <Alert severity="error">
-          Unable to save company. Check for a duplicate name and try again.
-        </Alert>
+        <Alert>{getErrorMessage(saveCompany.error, 'Unable to save the company. Please try again.')}</Alert>
       )}
-      <Paper component="form" onSubmit={submit} noValidate variant="outlined" sx={{ p: 3 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <TextField
-              label="Company name"
-              required
-              fullWidth
-              {...register('name')}
-              error={Boolean(errors.name)}
-              helperText={errors.name?.message}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField label="Industry" fullWidth {...register('industry')} />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField
-              label="Website"
-              fullWidth
-              {...register('website')}
-              error={Boolean(errors.website)}
-              helperText={errors.website?.message}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField label="Contact person" fullWidth {...register('contactPersonName')} />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField
-              label="Contact email"
-              type="email"
-              fullWidth
-              {...register('contactEmail')}
-              error={Boolean(errors.contactEmail)}
-              helperText={errors.contactEmail?.message}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField label="Contact phone" fullWidth {...register('contactPhone')} />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField label="About" multiline minRows={3} fullWidth {...register('about')} />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField label="Address" fullWidth {...register('address')} />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField label="City" fullWidth {...register('city')} />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField label="State" fullWidth {...register('state')} />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField label="Country" fullWidth {...register('country')} />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField label="Postal code" fullWidth {...register('postalCode')} />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField label="Logo path" fullWidth {...register('logoPath')} />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Controller
-              name="isActive"
-              control={control}
-              render={({ field }) => (
-                <FormControlLabel
-                  label="Active"
-                  control={<Checkbox checked={field.value} onChange={field.onChange} />}
-                />
-              )}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button onClick={() => navigate('/companies')}>Cancel</Button>
-              <Button type="submit" variant="contained" disabled={saveCompany.isPending}>
-                {saveCompany.isPending ? 'Saving…' : 'Save company'}
-              </Button>
-            </Stack>
-          </Grid>
-        </Grid>
-      </Paper>
-    </Stack>
+      <Card>
+        <form onSubmit={submit} noValidate>
+          <FormSection title="Profile" description="How this client appears across TalRekrut.">
+            <Field label="Company name" required error={errors.name?.message}>
+              <Input {...register('name')} />
+            </Field>
+            <Field label="Industry" error={errors.industry?.message}>
+              <Input placeholder="e.g. Fintech" {...register('industry')} />
+            </Field>
+            <Field label="Website" error={errors.website?.message} className="sm:col-span-2">
+              <Input type="url" placeholder="https://" {...register('website')} />
+            </Field>
+            <Field label="About" error={errors.about?.message} className="sm:col-span-2">
+              <Textarea rows={4} {...register('about')} />
+            </Field>
+            <Field label="Logo URL" error={errors.logoPath?.message} className="sm:col-span-2">
+              <Input {...register('logoPath')} />
+            </Field>
+            <label className="flex items-center gap-3 sm:col-span-2">
+              <Checkbox {...register('isActive')} />
+              <span className="flex flex-col">
+                <span className="text-sm font-medium">Active</span>
+                <span className="text-xs text-muted">Inactive companies can't have new jobs created.</span>
+              </span>
+            </label>
+          </FormSection>
+          <FormSection title="Primary contact" description="Who you work with at this company.">
+            <Field label="Contact person" error={errors.contactPersonName?.message} className="sm:col-span-2">
+              <Input {...register('contactPersonName')} />
+            </Field>
+            <Field label="Contact email" error={errors.contactEmail?.message}>
+              <Input type="email" {...register('contactEmail')} />
+            </Field>
+            <Field label="Contact phone" error={errors.contactPhone?.message}>
+              <Input type="tel" {...register('contactPhone')} />
+            </Field>
+          </FormSection>
+          <FormSection title="Address">
+            <Field label="Street address" error={errors.address?.message} className="sm:col-span-2">
+              <Input {...register('address')} />
+            </Field>
+            <Field label="City" error={errors.city?.message}>
+              <Input {...register('city')} />
+            </Field>
+            <Field label="State / region" error={errors.state?.message}>
+              <Input {...register('state')} />
+            </Field>
+            <Field label="Country" error={errors.country?.message}>
+              <Input {...register('country')} />
+            </Field>
+            <Field label="Postal code" error={errors.postalCode?.message}>
+              <Input {...register('postalCode')} />
+            </Field>
+          </FormSection>
+          <CardFooter>
+            <Button variant="outline" onClick={() => navigate(backTo)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={saveCompany.isPending}>
+              Save company
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
+    </div>
   )
 }

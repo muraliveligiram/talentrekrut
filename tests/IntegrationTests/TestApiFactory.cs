@@ -80,6 +80,24 @@ public sealed class TestApiFactory : WebApplicationFactory<Program>
             ?? throw new InvalidOperationException("Test login response did not contain an access token.");
     }
 
+    /// <summary>Adds skills to the library through the API and returns their ids by name.</summary>
+    public static async Task<Dictionary<string, long>> CreateSkillsAsync(HttpClient client, params string[] names)
+    {
+        var response = await client.PostAsJsonAsync("/api/skills", new { Names = names, Category = "Other" });
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Creating skills failed with {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+        }
+
+        using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("created").EnumerateArray()
+            .Concat(json.RootElement.GetProperty("existing").EnumerateArray())
+            .ToDictionary(
+                skill => skill.GetProperty("name").GetString()!,
+                skill => skill.GetProperty("id").GetInt64());
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");

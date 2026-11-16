@@ -1,5 +1,7 @@
 # TalRekrut
 
+See [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) for scope, status and roadmap.
+
 TalRekrut is an IT recruitment management system built with ASP.NET Core, EF Core, SQL Server, and a React/TypeScript frontend.
 
 ## Local prerequisites
@@ -10,15 +12,17 @@ TalRekrut is an IT recruitment management system built with ASP.NET Core, EF Cor
 
 The Development API connection string is configured in `Src/Presentation/API/appsettings.Development.json` for the `TalRekrut` database. On startup, the API applies EF migrations and seeds the Admin and Recruiter roles plus the configured initial Admin user.
 
-Set the JWT and initial Admin values in the API process environment; do not commit signing keys or passwords:
+Secrets are never stored in `appsettings*.json`. For local development, use .NET user-secrets (loaded automatically in the Development environment):
 
 ```powershell
-$env:Jwt__Issuer = "TalRekrut"
-$env:Jwt__Audience = "TalRekrut.Web"
-$env:Jwt__SigningKey = ([guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N"))
-$env:SeedAdmin__Email = "admin@example.com"
-$env:SeedAdmin__Password = "<choose-a-unique-password-of-at-least-12-characters>"
+Set-Location Src\Presentation\API
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost;Database=TalRekrut;User Id=SA;Password=<sa-password>;TrustServerCertificate=True;"
+dotnet user-secrets set "Jwt:SigningKey" "<random string of at least 32 bytes>"
+dotnet user-secrets set "SeedAdmin:Email" "admin@example.com"
+dotnet user-secrets set "SeedAdmin:Password" "<unique password of at least 12 characters>"
 ```
+
+In other environments, supply the same values as environment variables (`ConnectionStrings__DefaultConnection`, `Jwt__SigningKey`, `SeedAdmin__Email`, `SeedAdmin__Password`).
 
 ## Run
 

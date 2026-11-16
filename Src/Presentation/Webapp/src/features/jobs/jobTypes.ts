@@ -1,4 +1,5 @@
 import type { PagedResult } from '../companies/companyTypes'
+import type { SkillCategory } from '../skills/skillTypes'
 
 export type EmploymentType = 'FullTime' | 'PartTime' | 'Contract' | 'Temporary' | 'Internship'
 export type WorkMode = 'Onsite' | 'Remote' | 'Hybrid'
@@ -7,7 +8,9 @@ export type JobSkillType = 'Primary' | 'Secondary' | 'GoodToHave'
 
 export interface JobSkill {
   id: number
+  skillId: number
   skillName: string
+  category: SkillCategory
   skillType: JobSkillType
   minYears: number | null
 }
@@ -40,7 +43,7 @@ export interface Job {
 }
 
 export interface JobSkillWriteRequest {
-  skillName: string
+  skillId: number
   skillType: JobSkillType
   minYears: number | null
 }

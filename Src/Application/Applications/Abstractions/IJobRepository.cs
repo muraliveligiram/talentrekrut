@@ -31,8 +31,10 @@ public interface IJobRepository
         long jobId,
         long recruiterUserId,
         CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RecruiterOption>> GetRecruitersAsync(CancellationToken cancellationToken = default);
     Task<int> GetNextJobNumberAsync(int year, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<long, Skill>> GetSkillsAsync(
+        IReadOnlyCollection<long> skillIds,
+        CancellationToken cancellationToken = default);
     Task AddAsync(Job job, CancellationToken cancellationToken = default);
     Task AddAssignmentAsync(JobAssignment assignment, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);

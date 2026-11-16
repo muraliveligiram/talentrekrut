@@ -35,7 +35,7 @@ public sealed class JobTests
         Assert.StartsWith($"JOB-{DateTime.UtcNow.Year}-", firstJob.JobCode);
         Assert.Equal("JOB-" + DateTime.UtcNow.Year + "-0002", secondJob.JobCode);
 
-        var recruiterResponse = await client.GetAsync("/api/users?role=Recruiter");
+        var recruiterResponse = await client.GetAsync("/api/users/recruiters");
         Assert.Equal(HttpStatusCode.OK, recruiterResponse.StatusCode);
         using var recruiterJson = JsonDocument.Parse(await recruiterResponse.Content.ReadAsStringAsync());
         var recruiterId = recruiterJson.RootElement[0].GetProperty("id").GetInt64();
@@ -90,6 +90,7 @@ public sealed class JobTests
         var company = await companyResponse.Content.ReadFromJsonAsync<CompanyResponse>();
         Assert.NotNull(company);
 
+        var skills = await TestApiFactory.CreateSkillsAsync(client, "C#");
         var response = await client.PostAsJsonAsync("/api/jobs", new
         {
             CompanyId = company.Id,
@@ -99,7 +100,7 @@ public sealed class JobTests
             Openings = 1,
             EmploymentType = "FullTime",
             WorkMode = "Remote",
-            Skills = new[] { new { SkillName = "C#", SkillType = "Secondary", MinYears = 1 } }
+            Skills = new[] { new { SkillId = skills["C#"], SkillType = "Secondary", MinYears = (decimal?)1 } }
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -110,6 +111,7 @@ public sealed class JobTests
         long companyId,
         string title)
     {
+        var skills = await TestApiFactory.CreateSkillsAsync(client, "C#", "SQL");
         var response = await client.PostAsJsonAsync("/api/jobs", new
         {
             CompanyId = companyId,
@@ -124,8 +126,8 @@ public sealed class JobTests
             CommunicationRequirement = "Clear written communication",
             Skills = new[]
             {
-                new { SkillName = "C#", SkillType = "Primary", MinYears = 2 },
-                new { SkillName = "SQL", SkillType = "Secondary", MinYears = 1 }
+                new { SkillId = skills["C#"], SkillType = "Primary", MinYears = 2 },
+                new { SkillId = skills["SQL"], SkillType = "Secondary", MinYears = 1 }
             }
         });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

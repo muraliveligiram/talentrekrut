@@ -17,4 +17,5 @@ public sealed class Job : BaseEntity
     public JobStatus Status { get; set; } = JobStatus.Draft;
     public ICollection<JobSkill> Skills { get; set; } = new List<JobSkill>();
     public ICollection<JobAssignment> Assignments { get; set; } = new List<JobAssignment>();
+    public ICollection<JobApplication> Applications { get; set; } = new List<JobApplication>();
 }

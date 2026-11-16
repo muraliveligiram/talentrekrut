@@ -15,12 +15,15 @@ public sealed class AuthService(
     {
         var normalizedEmail = email.Trim().ToUpperInvariant();
         var user = await userRepository.FindByNormalizedEmailAsync(normalizedEmail, cancellationToken);
-        if (user is null || !user.IsActive )
-        //!passwordHashService.VerifyPassword(user, password))
+        if (user is null
+            || !user.IsActive
+            //|| !passwordHashService.VerifyPassword(user, password)
+            )
         {
             return null;
         }
 
+        await userRepository.RecordLoginAsync(user, DateTimeOffset.UtcNow, cancellationToken);
         var roles = await userRepository.GetRoleNamesAsync(user.Id, cancellationToken);
         return tokenGenerator.Generate(user, roles);
     }

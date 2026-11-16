@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createCompany,
   deleteCompany,
@@ -8,10 +8,12 @@ import {
 } from './companiesApi'
 import type { CompanyWriteRequest } from './companyTypes'
 
-export function useCompanies(search: string, page: number, pageSize: number) {
+export function useCompanies(search: string, page: number, pageSize: number, enabled = true) {
   return useQuery({
     queryKey: ['companies', search, page, pageSize],
     queryFn: () => getCompanies(search, page, pageSize),
+    placeholderData: keepPreviousData,
+    enabled,
   })
 }
 

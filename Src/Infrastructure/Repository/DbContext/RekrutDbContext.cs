@@ -22,7 +22,11 @@ public sealed class RekrutDbContext : DbContext
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
+    public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<JobAssignment> JobAssignments => Set<JobAssignment>();
+    public DbSet<Candidate> Candidates => Set<Candidate>();
+    public DbSet<JobApplication> JobApplications => Set<JobApplication>();
+    public DbSet<ApplicationStageChange> ApplicationStageChanges => Set<ApplicationStageChange>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -93,11 +97,23 @@ public sealed class RekrutDbContext : DbContext
 
         modelBuilder.Entity<JobSkill>(entity =>
         {
-            entity.Property(skill => skill.SkillName).HasMaxLength(100).IsRequired();
+            entity.HasOne(skill => skill.Skill)
+                .WithMany()
+                .HasForeignKey(skill => skill.SkillId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(skill => skill.Job)
                 .WithMany(job => job.Skills)
                 .HasForeignKey(skill => skill.JobId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(skill => !skill.IsDeleted);
+        });
+
+        modelBuilder.Entity<Skill>(entity =>
+        {
+            entity.Property(skill => skill.Name).HasMaxLength(100).IsRequired();
+            entity.Property(skill => skill.NormalizedName).HasMaxLength(100).IsRequired();
+            entity.HasIndex(skill => skill.NormalizedName).IsUnique();
+            entity.HasIndex(skill => new { skill.IsActive, skill.Category });
             entity.HasQueryFilter(skill => !skill.IsDeleted);
         });
 
@@ -117,6 +133,67 @@ public sealed class RekrutDbContext : DbContext
             entity.Property(assignment => assignment.AssignedAt).IsRequired();
             entity.Property(assignment => assignment.AssignedBy).IsRequired();
             entity.HasQueryFilter(assignment => !assignment.IsDeleted);
+        });
+
+        modelBuilder.Entity<Candidate>(entity =>
+        {
+            entity.Property(candidate => candidate.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(candidate => candidate.CurrentRole).HasMaxLength(200).IsRequired();
+            entity.Property(candidate => candidate.CurrentCompany).HasMaxLength(200).IsRequired();
+            entity.Property(candidate => candidate.Phone).HasMaxLength(30).IsRequired();
+            entity.Property(candidate => candidate.NormalizedPhone).HasMaxLength(30).IsRequired();
+            entity.Property(candidate => candidate.PersonalEmail).HasMaxLength(200).IsRequired();
+            entity.Property(candidate => candidate.NormalizedPersonalEmail).HasMaxLength(200).IsRequired();
+            entity.Property(candidate => candidate.CompanyEmail).HasMaxLength(200);
+            entity.Property(candidate => candidate.CurrentCtcLpa).HasPrecision(9, 2);
+            entity.Property(candidate => candidate.VariablePayLpa).HasPrecision(9, 2);
+            entity.Property(candidate => candidate.ExpectedCtcLpa).HasPrecision(9, 2);
+            entity.Property(candidate => candidate.LinkedInUrl).HasMaxLength(300);
+            entity.Property(candidate => candidate.Notes).HasMaxLength(4000);
+            entity.HasIndex(candidate => candidate.NormalizedPersonalEmail);
+            entity.HasIndex(candidate => candidate.NormalizedPhone);
+            entity.HasOne(candidate => candidate.SourcedBy)
+                .WithMany()
+                .HasForeignKey(candidate => candidate.SourcedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(candidate => !candidate.IsDeleted);
+        });
+
+        modelBuilder.Entity<JobApplication>(entity =>
+        {
+            entity.HasIndex(application => new { application.CandidateId, application.JobId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(application => new { application.JobId, application.Stage });
+            entity.Property(application => application.RejectionNotes).HasMaxLength(2000);
+            entity.PrimitiveCollection(application => application.RejectionReasons);
+            entity.HasOne(application => application.Candidate)
+                .WithMany(candidate => candidate.Applications)
+                .HasForeignKey(application => application.CandidateId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(application => application.Job)
+                .WithMany(job => job.Applications)
+                .HasForeignKey(application => application.JobId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(application => application.SubmittedBy)
+                .WithMany()
+                .HasForeignKey(application => application.SubmittedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(application => !application.IsDeleted);
+        });
+
+        modelBuilder.Entity<ApplicationStageChange>(entity =>
+        {
+            entity.Property(change => change.Notes).HasMaxLength(2000);
+            entity.HasOne(change => change.JobApplication)
+                .WithMany(application => application.History)
+                .HasForeignKey(change => change.JobApplicationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(change => change.ChangedBy)
+                .WithMany()
+                .HasForeignKey(change => change.ChangedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(change => !change.IsDeleted);
         });
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()

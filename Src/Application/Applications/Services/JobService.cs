@@ -63,7 +63,7 @@ public sealed class JobService(
             CompanyId = company.Id,
             Status = JobStatus.Draft
         };
-        ApplyRequest(job, request);
+        ApplyRequest(job, request, await LoadSkillsAsync(request, new HashSet<long>(), cancellationToken));
         await jobRepository.AddAsync(job, cancellationToken);
         await jobRepository.SaveChangesAsync(cancellationToken);
         return ToResponse(job);
@@ -83,10 +83,14 @@ public sealed class JobService(
             return null;
         }
 
+        var skills = await LoadSkillsAsync(
+            request,
+            job.Skills.Select(jobSkill => jobSkill.SkillId).ToHashSet(),
+            cancellationToken);
         job.Company = company;
         job.CompanyId = company.Id;
         job.Skills.Clear();
-        ApplyRequest(job, request);
+        ApplyRequest(job, request, skills);
         await jobRepository.SaveChangesAsync(cancellationToken);
         return ToResponse(job);
     }
@@ -162,17 +166,31 @@ public sealed class JobService(
         return true;
     }
 
-    public Task<IReadOnlyList<RecruiterOption>> GetRecruitersAsync(
-        CancellationToken cancellationToken = default)
-    {
-        return jobRepository.GetRecruitersAsync(cancellationToken);
-    }
-
     private bool IsAdmin => currentUserService.Roles.Contains(
         RoleNames.Admin,
         StringComparer.OrdinalIgnoreCase);
 
-    private static void ApplyRequest(Job job, JobWriteRequest request)
+    /// <summary>
+    /// Resolves requested skill ids against the library. Inactive skills are only allowed
+    /// when the job already uses them, so deactivating a skill never breaks editing a job.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<long, Skill>> LoadSkillsAsync(
+        JobWriteRequest request,
+        IReadOnlySet<long> existing,
+        CancellationToken cancellationToken)
+    {
+        var ids = request.Skills.Select(skill => skill.SkillId).Distinct().ToArray();
+        var skills = await jobRepository.GetSkillsAsync(ids, cancellationToken);
+        var invalid = ids.Where(id => !skills.TryGetValue(id, out var skill) || (!skill.IsActive && !existing.Contains(id)));
+        if (invalid.Any())
+        {
+            throw new ValidationException("One or more selected skills do not exist or are inactive.");
+        }
+
+        return skills;
+    }
+
+    private static void ApplyRequest(Job job, JobWriteRequest request, IReadOnlyDictionary<long, Skill> skills)
     {
         job.Title = request.Title.Trim();
         job.Description = request.Description?.Trim();
@@ -187,7 +205,8 @@ public sealed class JobService(
         {
             job.Skills.Add(new JobSkill
             {
-                SkillName = skill.SkillName.Trim(),
+                SkillId = skill.SkillId,
+                Skill = skills[skill.SkillId],
                 SkillType = skill.SkillType,
                 MinYears = skill.MinYears
             });
@@ -213,7 +232,9 @@ public sealed class JobService(
             job.Status,
             job.Skills.Select(skill => new JobSkillResponse(
                 skill.Id,
-                skill.SkillName,
+                skill.SkillId,
+                skill.Skill.Name,
+                skill.Skill.Category,
                 skill.SkillType,
                 skill.MinYears)).ToArray(),
             job.Assignments
