@@ -23,6 +23,10 @@ public sealed class JwtTokenGenerator(IOptions<JwtOptions> options) : IJwtTokenG
             new(ClaimTypes.Email, user.Email)
         };
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        if (user.CompanyId is { } companyId)
+        {
+            claims.Add(new Claim(AppClaimTypes.CompanyId, companyId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.SigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, Award, Briefcase, CalendarClock, UserSquare2, type LucideIcon } from 'lucide-react'
+import { ArrowRight, Award, Briefcase, CalendarClock, CircleCheck, PauseCircle, UserSquare2, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert } from '@/components/ui/alert'
 import { ButtonLink } from '@/components/ui/button'
@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAuth } from '@/features/auth/useAuth'
+import { useAuth, useRoleFlags } from '@/features/auth/useAuth'
 import { getErrorMessage } from '@/lib/api-error'
 import { getPipelineInsights, getPipelineStats } from '@/features/candidates/candidatesApi'
 import { getJobs } from '@/features/jobs/jobsApi'
@@ -21,10 +21,11 @@ const reportingDays = 60
 
 const noFilters = { search: '', companyId: '' }
 
-function useJobCount(status: JobStatus) {
+function useJobCount(status: JobStatus, enabled = true) {
   return useQuery({
     queryKey: ['jobs', 'count', status],
     queryFn: async () => (await getJobs({ ...noFilters, status }, 1, 1)).totalCount,
+    enabled,
   })
 }
 
@@ -74,14 +75,18 @@ function currentWeek() {
 }
 
 export function DashboardPage() {
-  const { roles, user } = useAuth()
-  const isAdmin = roles.includes('Admin')
+  const { user } = useAuth()
+  const { isAdmin, isVendor } = useRoleFlags()
   const openJobs = useJobCount('Open')
+  const onHoldJobs = useJobCount('OnHold', isVendor)
+  const closedJobs = useJobCount('Closed', isVendor)
   const insights = useQuery({
+    enabled: !isVendor,
     queryKey: ['applications', 'insights', reportingDays],
     queryFn: () => getPipelineInsights(reportingDays),
   })
   const pipeline = useQuery({
+    enabled: !isVendor,
     queryKey: ['applications', 'stats', 'week'],
     queryFn: () => {
       const { start, end } = currentWeek()
@@ -98,50 +103,69 @@ export function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title={firstName ? `Welcome back, ${firstName}` : 'Recruitment overview'}
-        description={isAdmin ? "Here's what's happening across your recruitment desk." : 'Your assigned work at a glance.'}
+        description={
+          isAdmin
+            ? "Here's what's happening across your recruitment desk."
+            : isVendor
+              ? "Your company's job postings at a glance."
+              : 'Your assigned work at a glance.'
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Open jobs" icon={Briefcase} value={openJobs.data} loading={openJobs.isLoading} to="/jobs" />
-        <StatCard
-          label="Active candidates"
-          icon={UserSquare2}
-          value={pipeline.data?.activeCandidates}
-          loading={pipeline.isLoading}
-          hint="In screening, shortlisted or interviewing"
-          to="/candidates"
-        />
-        <StatCard
-          label="Interviews this week"
-          icon={CalendarClock}
-          value={pipeline.data?.interviewsInRange}
-          loading={pipeline.isLoading}
-          to="/candidates?stage=InterviewScheduled"
-        />
-        <StatCard
-          label="Selected"
-          icon={Award}
-          value={insights.data?.selectedCount}
-          loading={insights.isLoading}
-          hint={`Candidates selected in the last ${reportingDays} days`}
-          to="/candidates?stage=Selected"
-        />
+        {isVendor ? (
+          <>
+            <StatCard label="On hold" icon={PauseCircle} value={onHoldJobs.data} loading={onHoldJobs.isLoading} to="/jobs" />
+            <StatCard label="Closed" icon={CircleCheck} value={closedJobs.data} loading={closedJobs.isLoading} to="/jobs" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Active candidates"
+              icon={UserSquare2}
+              value={pipeline.data?.activeCandidates}
+              loading={pipeline.isLoading}
+              hint="In screening, shortlisted or interviewing"
+              to="/candidates"
+            />
+            <StatCard
+              label="Interviews this week"
+              icon={CalendarClock}
+              value={pipeline.data?.interviewsInRange}
+              loading={pipeline.isLoading}
+              to="/candidates?stage=InterviewScheduled"
+            />
+            <StatCard
+              label="Selected"
+              icon={Award}
+              value={insights.data?.selectedCount}
+              loading={insights.isLoading}
+              hint={`Candidates selected in the last ${reportingDays} days`}
+              to="/candidates?stage=Selected"
+            />
+          </>
+        )}
       </div>
 
-      {insights.isError && <Alert>{getErrorMessage(insights.error, 'Unable to load hiring insights.')}</Alert>}
-      <div className="grid gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-2">
-          <OutcomesCard days={reportingDays} outcomes={insights.data?.outcomes} loading={insights.isLoading} />
-        </div>
-        <div className="lg:col-span-3">
-          <RecruiterActivityCard
-            days={reportingDays}
-            recruiters={insights.data?.recruiters}
-            loading={insights.isLoading}
-            isAdmin={isAdmin}
-          />
-        </div>
-      </div>
+      {!isVendor && (
+        <>
+          {insights.isError && <Alert>{getErrorMessage(insights.error, 'Unable to load hiring insights.')}</Alert>}
+          <div className="grid gap-6 lg:grid-cols-5">
+            <div className="lg:col-span-2">
+              <OutcomesCard days={reportingDays} outcomes={insights.data?.outcomes} loading={insights.isLoading} />
+            </div>
+            <div className="lg:col-span-3">
+              <RecruiterActivityCard
+                days={reportingDays}
+                recruiters={insights.data?.recruiters}
+                loading={insights.isLoading}
+                isAdmin={isAdmin}
+              />
+            </div>
+          </div>
+        </>
+      )}
 
       <Card className="overflow-hidden">
         <CardHeader className="flex-row items-center justify-between">
@@ -180,7 +204,13 @@ export function DashboardPage() {
           <EmptyState
             icon={Briefcase}
             title="No jobs yet"
-            description={isAdmin ? 'Create a job to start tracking requirements.' : 'Jobs assigned to you will appear here.'}
+            description={
+              isAdmin
+                ? 'Create a job to start tracking requirements.'
+                : isVendor
+                  ? "Your company's job postings will appear here."
+                  : 'Jobs assigned to you will appear here.'
+            }
           />
         )}
       </Card>

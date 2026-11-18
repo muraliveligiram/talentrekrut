@@ -100,10 +100,70 @@ public sealed class JobTests
             Openings = 1,
             EmploymentType = "FullTime",
             WorkMode = "Remote",
+            InterviewRounds = new[] { "Technical interview", "HR discussion" },
             Skills = new[] { new { SkillId = skills["C#"], SkillType = "Secondary", MinYears = (decimal?)1 } }
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Jobs_define_named_interview_rounds_in_order()
+    {
+        using var factory = new TestApiFactory();
+        using var client = factory.CreateClient();
+        await factory.SeedUserAsync("admin@example.test", "Test Administrator", RoleNames.Admin);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await factory.LoginAsync(client, "admin@example.test"));
+        var company = await (await client.PostAsJsonAsync("/api/companies", new { Name = "Contoso", IsActive = true }))
+            .Content.ReadFromJsonAsync<CompanyResponse>();
+        var skills = await TestApiFactory.CreateSkillsAsync(client, "C#");
+
+        object Body(params string[] rounds) => new
+        {
+            CompanyId = company!.Id,
+            Title = "Backend Engineer",
+            MinExperienceYears = 2,
+            MaxExperienceYears = 6,
+            Openings = 1,
+            EmploymentType = "FullTime",
+            WorkMode = "Hybrid",
+            InterviewRounds = rounds,
+            Skills = new[] { new { SkillId = skills["C#"], SkillType = "Primary" } }
+        };
+        static async Task<JsonElement> Json(HttpResponseMessage response) =>
+            await response.Content.ReadFromJsonAsync<JsonElement>();
+        static (long Id, int Sequence, string Name)[] Rounds(JsonElement job) => job.GetProperty("interviewRounds")
+            .EnumerateArray()
+            .Select(round => (round.GetProperty("id").GetInt64(), round.GetProperty("sequence").GetInt32(), round.GetProperty("name").GetString()!))
+            .ToArray();
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/jobs", Body())).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/jobs", Body("Coding", " "))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/jobs", Body("Coding", " coding "))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/jobs",
+            Body(Enumerable.Range(1, 11).Select(index => $"Round {index}").ToArray()))).StatusCode);
+
+        var created = await client.PostAsJsonAsync("/api/jobs", Body("Coding test", " Face to face ", "HR discussion"));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var job = await Json(created);
+        var jobId = job.GetProperty("id").GetInt64();
+        var original = Rounds(job);
+        Assert.Equal(["Coding test", "Face to face", "HR discussion"], original.Select(round => round.Name));
+        Assert.Equal([1, 2, 3], original.Select(round => round.Sequence));
+
+        // Rename round 2 and drop round 3: round ids stay attached to their positions.
+        var shorter = Rounds(await Json(await client.PutAsJsonAsync($"/api/jobs/{jobId}", Body("Coding test", "Technical panel"))));
+        Assert.Equal([(original[0].Id, 1, "Coding test"), (original[1].Id, 2, "Technical panel")], shorter);
+
+        // Grow to four rounds.
+        var longer = Rounds(await Json(await client.PutAsJsonAsync($"/api/jobs/{jobId}",
+            Body("Coding test", "Technical panel", "Managerial", "HR discussion"))));
+        Assert.Equal(["Coding test", "Technical panel", "Managerial", "HR discussion"], longer.Select(round => round.Name));
+        Assert.Equal(original[0].Id, longer[0].Id);
+
+        var fetched = Rounds(await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{jobId}"));
+        Assert.Equal(longer, fetched);
     }
 
     private static async Task<(long Id, string JobCode)> CreateJobAsync(
@@ -123,6 +183,7 @@ public sealed class JobTests
             Location = "Remote",
             EmploymentType = "FullTime",
             WorkMode = "Remote",
+            InterviewRounds = new[] { "Technical interview", "HR discussion" },
             CommunicationRequirement = "Clear written communication",
             Skills = new[]
             {

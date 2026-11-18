@@ -6,6 +6,8 @@ namespace Applications.Validators;
 
 public sealed class JobWriteRequestValidator : AbstractValidator<JobWriteRequest>
 {
+    public const int MaxInterviewRounds = 10;
+
     public JobWriteRequestValidator()
     {
         RuleFor(request => request.CompanyId).NotEmpty();
@@ -32,6 +34,18 @@ public sealed class JobWriteRequestValidator : AbstractValidator<JobWriteRequest
             .Must(skills => skills is null || skills.Count <= 50)
             .WithMessage("A job can have at most 50 skills.");
         RuleForEach(request => request.Skills).SetValidator(new JobSkillWriteRequestValidator());
+        RuleFor(request => request.InterviewRounds)
+            .NotNull()
+            .Must(rounds => rounds is { Count: >= 1 and <= MaxInterviewRounds })
+            .WithMessage($"Add between 1 and {MaxInterviewRounds} interview rounds.")
+            .Must(rounds => rounds is null
+                || rounds.Select(round => round?.Trim().ToUpperInvariant()).Distinct().Count() == rounds.Count)
+            .WithMessage("Each interview round needs a different name.");
+        RuleForEach(request => request.InterviewRounds)
+            .NotEmpty()
+            .WithMessage("Name every interview round.")
+            .MaximumLength(100)
+            .WithMessage("Round names must be 100 characters or fewer.");
     }
 
     private sealed class JobSkillWriteRequestValidator : AbstractValidator<JobSkillWriteRequest>

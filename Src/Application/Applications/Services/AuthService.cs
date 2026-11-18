@@ -17,7 +17,7 @@ public sealed class AuthService(
         var user = await userRepository.FindByNormalizedEmailAsync(normalizedEmail, cancellationToken);
         if (user is null
             || !user.IsActive
-            //|| !passwordHashService.VerifyPassword(user, password)
+            || !passwordHashService.VerifyPassword(user, password)
             )
         {
             return null;

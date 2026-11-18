@@ -24,12 +24,23 @@ public static class ServiceCollectionExtensions
         {
             options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
             {
-                Title = "RekrutMS API",
-                Version = "v1"
+                Title = "Talent Pool API",
+                Version = "v1",
+                Description = "Recruitment API. Sign in with POST /api/auth/login, then click **Authorize** and paste the access token."
             });
+            // Endpoint and model descriptions come from the /// comments in the API and Applications projects.
+            foreach (var xmlFile in new[] { "API.xml", "Applications.xml" })
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, xmlFile);
+                if (File.Exists(path))
+                {
+                    options.IncludeXmlComments(path, includeControllerXmlComments: true);
+                }
+            }
             options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
             {
                 Name = "Authorization",
+                Description = "Paste the accessToken returned by POST /api/auth/login (without the word Bearer).",
                 Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
                 Scheme = "bearer",
                 BearerFormat = "JWT",

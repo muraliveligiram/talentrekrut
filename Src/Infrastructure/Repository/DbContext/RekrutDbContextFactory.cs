@@ -22,5 +22,6 @@ public sealed class RekrutDbContextFactory : IDesignTimeDbContextFactory<RekrutD
     {
         public long? UserId => null;
         public IReadOnlyCollection<string> Roles => Array.Empty<string>();
+        public long? CompanyId => null;
     }
 }

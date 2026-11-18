@@ -10,6 +10,7 @@ public sealed record JobCandidateExport(
     JobStatus JobStatus,
     string? Location,
     int Openings,
+    IReadOnlyList<string> InterviewRounds,
     IReadOnlyList<JobCandidateExportRow> Rows);
 
 public sealed record JobCandidateExportRow(

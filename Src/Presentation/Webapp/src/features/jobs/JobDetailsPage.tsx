@@ -1,4 +1,4 @@
-import { Pencil, UserMinus, UserPlus } from 'lucide-react'
+import { ChevronRight, Pencil, UserMinus, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -11,7 +11,7 @@ import { DetailItem, DetailList } from '@/components/ui/detail-list'
 import { Select } from '@/components/ui/input'
 import { PageHeader } from '@/components/ui/page-header'
 import { PageLoader } from '@/components/ui/spinner'
-import { useAuth } from '@/features/auth/useAuth'
+import { useRoleFlags } from '@/features/auth/useAuth'
 import { JobPipeline } from '@/features/candidates/JobPipeline'
 import { getErrorMessage } from '@/lib/api-error'
 import { formatDate, humanize } from '@/lib/utils'
@@ -24,8 +24,7 @@ const skillTypeOrder: JobSkillType[] = ['Primary', 'Secondary', 'GoodToHave']
 
 export function JobDetailsPage() {
   const { id = '' } = useParams()
-  const { roles } = useAuth()
-  const isAdmin = roles.includes('Admin')
+  const { isAdmin, isStaff } = useRoleFlags()
   const [recruiterId, setRecruiterId] = useState('')
   const jobQuery = useJob(id)
   const recruitersQuery = useRecruiters(isAdmin)
@@ -109,8 +108,8 @@ export function JobDetailsPage() {
 
       {mutationError && <Alert>{getErrorMessage(mutationError, 'Unable to update this job. Refresh and try again.')}</Alert>}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6 lg:col-span-2">
+      <div className={isStaff ? 'grid gap-6 lg:grid-cols-3' : 'grid gap-6'}>
+        <div className={isStaff ? 'flex flex-col gap-6 lg:col-span-2' : 'flex flex-col gap-6'}>
           <Card>
             <CardHeader>
               <CardTitle>Details</CardTitle>
@@ -129,6 +128,41 @@ export function JobDetailsPage() {
               <div className="mt-6 border-t pt-5">
                 <DetailItem label="Description">{job.description}</DetailItem>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Interview process</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {job.interviewRounds.length ? (
+                <ol className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                  {job.interviewRounds.map((round, index) => (
+                    <li key={round.id} className="flex items-center gap-2">
+                      <span className="flex items-center gap-2 rounded-lg border bg-surface-muted/40 py-1.5 pr-3 pl-1.5 text-sm">
+                        <span
+                          aria-hidden
+                          className="flex size-6 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-soft-foreground"
+                        >
+                          {round.sequence}
+                        </span>
+                        <span>
+                          <span className="sr-only">Round {round.sequence}: </span>
+                          {round.name}
+                        </span>
+                      </span>
+                      {index < job.interviewRounds.length - 1 && (
+                        <ChevronRight aria-hidden className="hidden size-4 text-muted sm:block" />
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-muted">
+                  No interview rounds defined yet.{isAdmin ? ' Edit the job to add them.' : ''}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -157,76 +191,78 @@ export function JobDetailsPage() {
             </CardContent>
           </Card>
 
-          <JobPipeline jobId={id} isOpen={job.status === 'Open'} />
+          <JobPipeline jobId={id} isOpen={job.status === 'Open'} isStaff={isStaff} isAdmin={isAdmin} />
         </div>
 
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>Recruiters</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {isAdmin && (
-              <div className="flex gap-2">
-                <Select
-                  aria-label="Recruiter"
-                  value={recruiterId}
-                  onChange={(event) => setRecruiterId(event.target.value)}
-                  className="flex-1"
-                  disabled={recruitersQuery.isLoading}
-                >
-                  <option value="">
-                    {availableRecruiters.length ? 'Select a recruiter…' : 'No recruiters available'}
-                  </option>
-                  {availableRecruiters.map((recruiter) => (
-                    <option key={recruiter.id} value={recruiter.id}>
-                      {recruiter.fullName}
+        {isStaff && (
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle>Recruiters</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {isAdmin && (
+                <div className="flex gap-2">
+                  <Select
+                    aria-label="Recruiter"
+                    value={recruiterId}
+                    onChange={(event) => setRecruiterId(event.target.value)}
+                    className="flex-1"
+                    disabled={recruitersQuery.isLoading}
+                  >
+                    <option value="">
+                      {availableRecruiters.length ? 'Select a recruiter…' : 'No recruiters available'}
                     </option>
+                    {availableRecruiters.map((recruiter) => (
+                      <option key={recruiter.id} value={recruiter.id}>
+                        {recruiter.fullName}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button onClick={handleAssign} disabled={!recruiterId} loading={assignRecruiter.isPending}>
+                    <UserPlus />
+                    Assign
+                  </Button>
+                </div>
+              )}
+              {recruitersQuery.isError && <Alert>Unable to load recruiters.</Alert>}
+              {job.assignments.length ? (
+                <ul className="flex flex-col divide-y">
+                  {job.assignments.map((assignment) => (
+                    <li key={assignment.recruiterUserId} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <Avatar name={assignment.recruiterName} />
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm font-medium">{assignment.recruiterName}</span>
+                        <span className="text-xs text-muted">Assigned {formatDate(assignment.assignedAt)}</span>
+                      </div>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Remove ${assignment.recruiterName}`}
+                          disabled={removeRecruiter.isPending}
+                          onClick={() =>
+                            removeRecruiter.mutate(assignment.recruiterUserId, {
+                              onSuccess: () => toast.success('Recruiter removed', { description: assignment.recruiterName }),
+                            })
+                          }
+                        >
+                          <UserMinus />
+                        </Button>
+                      )}
+                    </li>
                   ))}
-                </Select>
-                <Button onClick={handleAssign} disabled={!recruiterId} loading={assignRecruiter.isPending}>
-                  <UserPlus />
-                  Assign
-                </Button>
-              </div>
-            )}
-            {recruitersQuery.isError && <Alert>Unable to load recruiters.</Alert>}
-            {job.assignments.length ? (
-              <ul className="flex flex-col divide-y">
-                {job.assignments.map((assignment) => (
-                  <li key={assignment.recruiterUserId} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                    <Avatar name={assignment.recruiterName} />
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium">{assignment.recruiterName}</span>
-                      <span className="text-xs text-muted">Assigned {formatDate(assignment.assignedAt)}</span>
-                    </div>
-                    {isAdmin && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Remove ${assignment.recruiterName}`}
-                        disabled={removeRecruiter.isPending}
-                        onClick={() =>
-                          removeRecruiter.mutate(assignment.recruiterUserId, {
-                            onSuccess: () => toast.success('Recruiter removed', { description: assignment.recruiterName }),
-                          })
-                        }
-                      >
-                        <UserMinus />
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted">No recruiters are assigned yet.</p>
-            )}
-            {isAdmin && (
-              <p className="text-xs text-muted">
-                Need someone new? <Link to="/users" className="text-primary hover:underline">Invite a recruiter</Link>.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">No recruiters are assigned yet.</p>
+              )}
+              {isAdmin && (
+                <p className="text-xs text-muted">
+                  Need someone new? <Link to="/users" className="text-primary hover:underline">Invite a recruiter</Link>.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

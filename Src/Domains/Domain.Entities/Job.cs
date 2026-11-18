@@ -16,6 +16,7 @@ public sealed class Job : BaseEntity
     public string? CommunicationRequirement { get; set; }
     public JobStatus Status { get; set; } = JobStatus.Draft;
     public ICollection<JobSkill> Skills { get; set; } = new List<JobSkill>();
+    public ICollection<JobInterviewRound> InterviewRounds { get; set; } = new List<JobInterviewRound>();
     public ICollection<JobAssignment> Assignments { get; set; } = new List<JobAssignment>();
     public ICollection<JobApplication> Applications { get; set; } = new List<JobApplication>();
 }

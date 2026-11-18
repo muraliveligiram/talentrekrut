@@ -18,6 +18,7 @@ const base: Application = {
   candidateName: 'Priya Sharma',
   candidateRole: 'Senior Engineer',
   candidateCompany: 'Globex',
+  candidateLevel: 'Senior',
   jobId: 5,
   jobCode: 'JOB-2026-0005',
   jobTitle: 'Backend Engineer',

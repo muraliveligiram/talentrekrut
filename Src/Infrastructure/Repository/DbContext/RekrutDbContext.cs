@@ -23,6 +23,7 @@ public sealed class RekrutDbContext : DbContext
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
     public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<JobInterviewRound> JobInterviewRounds => Set<JobInterviewRound>();
     public DbSet<JobAssignment> JobAssignments => Set<JobAssignment>();
     public DbSet<Candidate> Candidates => Set<Candidate>();
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
@@ -39,6 +40,10 @@ public sealed class RekrutDbContext : DbContext
             entity.Property(user => user.NormalizedEmail).HasMaxLength(200).IsRequired();
             entity.Property(user => user.FullName).HasMaxLength(200).IsRequired();
             entity.Property(user => user.PasswordHash).HasMaxLength(500).IsRequired();
+            entity.HasOne(user => user.Company)
+                .WithMany()
+                .HasForeignKey(user => user.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(user => !user.IsDeleted);
         });
 
@@ -106,6 +111,19 @@ public sealed class RekrutDbContext : DbContext
                 .HasForeignKey(skill => skill.JobId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasQueryFilter(skill => !skill.IsDeleted);
+        });
+
+        modelBuilder.Entity<JobInterviewRound>(entity =>
+        {
+            entity.Property(round => round.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(round => new { round.JobId, round.Sequence })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasOne(round => round.Job)
+                .WithMany(job => job.InterviewRounds)
+                .HasForeignKey(round => round.JobId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(round => !round.IsDeleted);
         });
 
         modelBuilder.Entity<Skill>(entity =>

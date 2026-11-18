@@ -28,6 +28,7 @@ public interface IUserRepository
         IEnumerable<string> roleNames,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RecruiterOption>> GetRecruiterOptionsAsync(CancellationToken cancellationToken = default);
+    Task<Company?> GetCompanyAsync(long companyId, CancellationToken cancellationToken = default);
     Task AddAsync(User user, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

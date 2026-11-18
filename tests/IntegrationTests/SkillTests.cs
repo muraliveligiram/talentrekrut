@@ -66,6 +66,7 @@ public sealed class SkillTests
             Openings = 1,
             EmploymentType = "Contract",
             WorkMode = "Remote",
+            InterviewRounds = new[] { "Technical interview", "HR discussion" },
             Skills = jobSkills.Select(skill => new { SkillId = skill.Id, SkillType = skill.Type }).ToArray()
         };
 

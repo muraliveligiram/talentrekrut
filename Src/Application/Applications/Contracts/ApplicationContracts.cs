@@ -7,7 +7,9 @@ public sealed record ApplicationResponse(
     long CandidateId,
     string CandidateName,
     string CandidateRole,
-    string CandidateCompany,
+    // The candidate's current employer. Null for vendors.
+    string? CandidateCompany,
+    CandidateLevel CandidateLevel,
     long JobId,
     string JobCode,
     string JobTitle,
@@ -17,6 +19,7 @@ public sealed record ApplicationResponse(
     string SubmittedByName,
     DateTimeOffset? InterviewScheduledAt,
     IReadOnlyList<RejectionReason> RejectionReasons,
+    // Internal free text. Null for vendors.
     string? RejectionNotes,
     IReadOnlyList<StageChangeResponse> History);
 

@@ -346,6 +346,39 @@ public sealed class CandidateTests
         Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Get, "/api/applications/insights?days=0")).StatusCode);
     }
 
+    [Fact]
+    public async Task Admins_can_remove_a_candidate_from_one_job_only()
+    {
+        await using var env = await Env.CreateAsync();
+        var jobA = await env.CreateOpenJobAsync("Job A", assignRecruiter: true);
+        var jobB = await env.CreateOpenJobAsync("Job B");
+        var candidate = await env.CreateCandidateAsync(env.Admin, "Kiran", "kiran@mail.test", "9000000061", jobA);
+        var appA = candidate.Applications[0].Id;
+        await env.PostAsync<ApplicationResponse>(env.Admin, $"/api/applications/{appA}/screening", new { Shortlisted = true });
+        await env.Send(env.Admin, HttpMethod.Post, $"/api/candidates/{candidate.Id}/applications", new { JobId = jobB });
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await env.Send(env.Recruiter, HttpMethod.Delete, $"/api/applications/{appA}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await env.Send(env.Admin, HttpMethod.Delete, "/api/applications/999999")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await env.Send(env.Admin, HttpMethod.Delete, $"/api/applications/{appA}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await env.Send(env.Admin, HttpMethod.Delete, $"/api/applications/{appA}")).StatusCode);
+
+        Assert.Empty(await env.GetAsync<ApplicationResponse[]>(env.Admin, $"/api/jobs/{jobA}/applications"));
+        Assert.Equal(HttpStatusCode.NotFound, (await env.Send(env.Admin, HttpMethod.Get, $"/api/applications/{appA}")).StatusCode);
+
+        // The candidate and their other application are untouched.
+        var after = await env.GetAsync<CandidateResponse>(env.Admin, $"/api/candidates/{candidate.Id}");
+        Assert.Equal(jobB, Assert.Single(after.Applications).JobId);
+
+        // Removed activity no longer counts in insights, and the candidate can be submitted to the job again.
+        var insights = await env.GetAsync<PipelineInsightsResponse>(env.Admin, "/api/applications/insights?days=60");
+        Assert.DoesNotContain(insights.Recruiters, row => row.Shortlisted > 0);
+        var resubmit = await env.Send(env.Admin, HttpMethod.Post, $"/api/candidates/{candidate.Id}/applications", new { JobId = jobA });
+        Assert.Equal(HttpStatusCode.Created, resubmit.StatusCode);
+        var fresh = (await resubmit.Content.ReadFromJsonAsync<ApplicationResponse>(Json))!;
+        Assert.Equal(ApplicationStage.Screening, fresh.Stage);
+        Assert.Single(fresh.History);
+    }
+
     private sealed class Env : IAsyncDisposable
     {
         private readonly TestApiFactory _factory;
@@ -394,6 +427,7 @@ public sealed class CandidateTests
                 Openings = 1,
                 EmploymentType = "FullTime",
                 WorkMode = "Hybrid",
+                InterviewRounds = new[] { "Technical interview", "HR discussion" },
                 Skills = new[] { new { SkillId = skills["C#"], SkillType = "Primary" } }
             });
             return job.GetProperty("id").GetInt64();

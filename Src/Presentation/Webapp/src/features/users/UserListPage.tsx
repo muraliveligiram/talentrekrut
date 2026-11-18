@@ -70,6 +70,7 @@ export function UserListPage() {
           fullName: toggling.fullName,
           roles: toggling.roles,
           isActive: activate,
+          companyId: toggling.companyId,
         },
       })
       toast.success(activate ? 'User activated' : 'User deactivated', { description: toggling.fullName })
@@ -202,12 +203,18 @@ export function UserListPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {user.roles.map((value) => (
-                                <Badge key={value} tone={value === 'Admin' ? 'primary' : 'neutral'}>
-                                  {value}
-                                </Badge>
-                              ))}
+                            <div className="flex flex-col gap-1">
+                              <div className="flex flex-wrap gap-1">
+                                {user.roles.map((value) => (
+                                  <Badge
+                                    key={value}
+                                    tone={value === 'Admin' ? 'primary' : value === 'Vendor' ? 'warning' : 'neutral'}
+                                  >
+                                    {value}
+                                  </Badge>
+                                ))}
+                              </div>
+                              {user.companyName && <span className="text-xs text-muted">{user.companyName}</span>}
                             </div>
                           </TableCell>
                           <TableCell>

@@ -27,6 +27,7 @@ const SkillsPage = lazyNamed(() => import('./features/skills/SkillsPage'), 'Skil
 const AccountPage = lazyNamed(() => import('./features/account/AccountPage'), 'AccountPage')
 
 const adminOnly = ['Admin']
+const staffOnly = ['Admin', 'Recruiter']
 
 export default function App() {
   return (
@@ -53,13 +54,15 @@ export default function App() {
             <Route path="users" element={<RequireAuth allowedRoles={adminOnly} />}>
               <Route index element={<UserListPage />} />
             </Route>
-            <Route path="candidates">
+            <Route path="candidates" element={<RequireAuth allowedRoles={staffOnly} />}>
               <Route index element={<CandidateListPage />} />
               <Route path="new" element={<CandidateFormPage />} />
               <Route path=":id" element={<CandidateDetailsPage />} />
               <Route path=":id/edit" element={<CandidateFormPage />} />
             </Route>
-            <Route path="skills" element={<SkillsPage />} />
+            <Route path="skills" element={<RequireAuth allowedRoles={staffOnly} />}>
+              <Route index element={<SkillsPage />} />
+            </Route>
             <Route path="account" element={<AccountPage />} />
           </Route>
         </Route>

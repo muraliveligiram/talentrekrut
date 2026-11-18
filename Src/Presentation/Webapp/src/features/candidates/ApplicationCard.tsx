@@ -1,9 +1,9 @@
-import { CalendarClock, ChevronRight, ClipboardCheck, Gavel } from 'lucide-react'
+import { CalendarClock, ChevronRight, ClipboardCheck, Gavel, UserMinus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/utils'
-import { rejectionReasonLabels, stageLabels, type Application } from './candidateTypes'
+import { levelLabels, rejectionReasonLabels, stageLabels, type Application } from './candidateTypes'
 import { StageBadge } from './StageBadge'
 import type { WorkflowAction } from './WorkflowDialogs'
 import { WorkflowStepper } from './WorkflowStepper'
@@ -15,9 +15,13 @@ interface ApplicationCardProps {
   /** Which side to headline: the job (on a candidate page) or the candidate (on a job page). */
   context: 'candidate' | 'job'
   onAction: (application: Application, action: WorkflowAction) => void
+  /** Vendors can't open candidate profiles, so the name is shown as plain text. */
+  linkToCandidate?: boolean
+  /** Admins only: shows a "Remove from job" action. */
+  onRemove?: (application: Application) => void
 }
 
-export function ApplicationCard({ application, context, onAction }: ApplicationCardProps) {
+export function ApplicationCard({ application, context, onAction, linkToCandidate = true, onRemove }: ApplicationCardProps) {
   const { stage } = application
   const interviewAt = application.interviewScheduledAt ? new Date(application.interviewScheduledAt) : null
 
@@ -36,11 +40,17 @@ export function ApplicationCard({ application, context, onAction }: ApplicationC
             </>
           ) : (
             <>
-              <Link to={`/candidates/${application.candidateId}`} className="truncate font-medium hover:underline">
-                {application.candidateName}
-              </Link>
+              {linkToCandidate ? (
+                <Link to={`/candidates/${application.candidateId}`} className="truncate font-medium hover:underline">
+                  {application.candidateName}
+                </Link>
+              ) : (
+                <span className="truncate font-medium">{application.candidateName}</span>
+              )}
               <span className="truncate text-xs text-muted">
-                {application.candidateRole} at {application.candidateCompany}
+                {application.candidateRole}
+                {application.candidateCompany ? ` at ${application.candidateCompany}` : ''} ·{' '}
+                {levelLabels[application.candidateLevel]}
               </span>
             </>
           )}
@@ -126,8 +136,22 @@ export function ApplicationCard({ application, context, onAction }: ApplicationC
         </ol>
       </details>
 
-      <footer className="text-xs text-muted">
-        Submitted by {application.submittedByName} on {formatDate(application.submittedAt)}
+      <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+        <span>
+          Submitted by {application.submittedByName} on {formatDate(application.submittedAt)}
+        </span>
+        {onRemove && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-my-1 -mr-2 text-danger hover:bg-danger-soft hover:text-danger"
+            onClick={() => onRemove(application)}
+            aria-label={`Remove ${application.candidateName} from ${application.jobTitle}`}
+          >
+            <UserMinus />
+            Remove from job
+          </Button>
+        )}
       </footer>
     </article>
   )

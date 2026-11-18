@@ -11,6 +11,7 @@ internal static class ApplicationMapper
         application.Candidate.FullName,
         application.Candidate.CurrentRole,
         application.Candidate.CurrentCompany,
+        application.Candidate.Level,
         application.JobId,
         application.Job.JobCode,
         application.Job.Title,
@@ -33,6 +34,24 @@ internal static class ApplicationMapper
                 change.InterviewScheduledAt,
                 change.Notes))
             .ToArray());
+
+    /// <summary>
+    /// What a vendor may see: the candidate's name, role and level and the workflow itself, but not
+    /// their employer or any internal free-text notes (which often hold CTC or contact details).
+    /// </summary>
+    public static ApplicationResponse ToVendorResponse(JobApplication application)
+    {
+        var response = ToResponse(application);
+        return response with
+        {
+            CandidateCompany = null,
+            RejectionNotes = null,
+            History = response.History.Select(change => change with { Notes = null }).ToArray()
+        };
+    }
+
+    public static Func<JobApplication, ApplicationResponse> For(Abstractions.AccessScope scope) =>
+        scope.IsVendor ? ToVendorResponse : ToResponse;
 
     public static bool IsActive(ApplicationStage stage) =>
         stage is ApplicationStage.Screening or ApplicationStage.Shortlisted or ApplicationStage.InterviewScheduled;

@@ -18,8 +18,11 @@ public sealed record JobResponse(
     string? CommunicationRequirement,
     JobStatus Status,
     IReadOnlyList<JobSkillResponse> Skills,
+    IReadOnlyList<InterviewRoundResponse> InterviewRounds,
     IReadOnlyList<JobAssignmentResponse> Assignments,
     DateTimeOffset CreatedAt);
+
+public sealed record InterviewRoundResponse(long Id, int Sequence, string Name);
 
 public sealed record JobSkillResponse(
     long Id,

@@ -32,3 +32,6 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+
+# Deployment output
+publish/

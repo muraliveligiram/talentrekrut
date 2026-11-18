@@ -468,6 +468,51 @@ namespace Repository.Migrations
                     b.ToTable("JobAssignments");
                 });
 
+            modelBuilder.Entity("Domain.Entities.JobInterviewRound", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("JobId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId", "Sequence")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("JobInterviewRounds");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobSkill", b =>
                 {
                     b.Property<long>("Id")
@@ -611,6 +656,9 @@ namespace Repository.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<long?>("CompanyId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -655,6 +703,8 @@ namespace Repository.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
 
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
@@ -790,6 +840,17 @@ namespace Repository.Migrations
                     b.Navigation("Recruiter");
                 });
 
+            modelBuilder.Entity("Domain.Entities.JobInterviewRound", b =>
+                {
+                    b.HasOne("Domain.Entities.Job", "Job")
+                        .WithMany("InterviewRounds")
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobSkill", b =>
                 {
                     b.HasOne("Domain.Entities.Job", "Job")
@@ -807,6 +868,16 @@ namespace Repository.Migrations
                     b.Navigation("Job");
 
                     b.Navigation("Skill");
+                });
+
+            modelBuilder.Entity("Domain.Entities.User", b =>
+                {
+                    b.HasOne("Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Domain.Entities.UserRole", b =>
@@ -843,6 +914,8 @@ namespace Repository.Migrations
                     b.Navigation("Applications");
 
                     b.Navigation("Assignments");
+
+                    b.Navigation("InterviewRounds");
 
                     b.Navigation("Skills");
                 });

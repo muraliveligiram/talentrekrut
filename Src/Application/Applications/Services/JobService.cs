@@ -24,14 +24,13 @@ public sealed class JobService(
             search?.Trim(),
             companyId,
             status,
-            IsAdmin,
-            IsAdmin ? null : currentUserService.UserId,
+            currentUserService.Scope(),
             page,
             pageSize,
             cancellationToken);
 
         return new PagedResult<JobResponse>(
-            jobs.Select(ToResponse).ToArray(),
+            jobs.Select(ToVisibleResponse).ToArray(),
             page,
             pageSize,
             totalCount);
@@ -39,12 +38,8 @@ public sealed class JobService(
 
     public async Task<JobResponse?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
-        var job = await jobRepository.GetByIdAsync(
-            id,
-            IsAdmin,
-            IsAdmin ? null : currentUserService.UserId,
-            cancellationToken);
-        return job is null ? null : ToResponse(job);
+        var job = await jobRepository.GetByIdAsync(id, currentUserService.Scope(), cancellationToken);
+        return job is null ? null : ToVisibleResponse(job);
     }
 
     public async Task<JobResponse> CreateAsync(
@@ -64,6 +59,7 @@ public sealed class JobService(
             Status = JobStatus.Draft
         };
         ApplyRequest(job, request, await LoadSkillsAsync(request, new HashSet<long>(), cancellationToken));
+        SyncInterviewRounds(job, request.InterviewRounds);
         await jobRepository.AddAsync(job, cancellationToken);
         await jobRepository.SaveChangesAsync(cancellationToken);
         return ToResponse(job);
@@ -77,7 +73,7 @@ public sealed class JobService(
         await jobValidator.ValidateAndThrowAsync(request, cancellationToken);
         var company = await jobRepository.GetActiveCompanyAsync(request.CompanyId, cancellationToken)
             ?? throw new CompanyNotFoundException();
-        var job = await jobRepository.GetByIdAsync(id, isAdmin: true, recruiterUserId: null, cancellationToken);
+        var job = await jobRepository.GetByIdAsync(id, AccessScope.Unrestricted, cancellationToken);
         if (job is null)
         {
             return null;
@@ -91,6 +87,7 @@ public sealed class JobService(
         job.CompanyId = company.Id;
         job.Skills.Clear();
         ApplyRequest(job, request, skills);
+        SyncInterviewRounds(job, request.InterviewRounds);
         await jobRepository.SaveChangesAsync(cancellationToken);
         return ToResponse(job);
     }
@@ -105,7 +102,7 @@ public sealed class JobService(
             throw new ValidationException("The selected job status is invalid.");
         }
 
-        var job = await jobRepository.GetByIdAsync(id, isAdmin: true, recruiterUserId: null, cancellationToken);
+        var job = await jobRepository.GetByIdAsync(id, AccessScope.Unrestricted, cancellationToken);
         if (job is null)
         {
             return null;
@@ -121,7 +118,7 @@ public sealed class JobService(
         long recruiterUserId,
         CancellationToken cancellationToken = default)
     {
-        var job = await jobRepository.GetByIdAsync(jobId, isAdmin: true, recruiterUserId: null, cancellationToken);
+        var job = await jobRepository.GetByIdAsync(jobId, AccessScope.Unrestricted, cancellationToken);
         if (job is null)
         {
             return false;
@@ -166,9 +163,12 @@ public sealed class JobService(
         return true;
     }
 
-    private bool IsAdmin => currentUserService.Roles.Contains(
-        RoleNames.Admin,
-        StringComparer.OrdinalIgnoreCase);
+    /// <summary>Hides internal recruiter assignments from vendors.</summary>
+    private JobResponse ToVisibleResponse(Job job)
+    {
+        var response = ToResponse(job);
+        return currentUserService.Scope().IsVendor ? response with { Assignments = [] } : response;
+    }
 
     /// <summary>
     /// Resolves requested skill ids against the library. Inactive skills are only allowed
@@ -188,6 +188,34 @@ public sealed class JobService(
         }
 
         return skills;
+    }
+
+    /// <summary>
+    /// Matches rounds by position: existing rounds are renamed in place (keeping their ids),
+    /// extra rounds are added and surplus rounds are soft-deleted.
+    /// </summary>
+    private static void SyncInterviewRounds(Job job, IReadOnlyList<string> names)
+    {
+        var existing = job.InterviewRounds.OrderBy(round => round.Sequence).ToList();
+        for (var index = 0; index < names.Count; index++)
+        {
+            var name = names[index].Trim();
+            if (index < existing.Count)
+            {
+                existing[index].Name = name;
+                existing[index].Sequence = index + 1;
+            }
+            else
+            {
+                job.InterviewRounds.Add(new JobInterviewRound { Sequence = index + 1, Name = name });
+            }
+        }
+
+        foreach (var surplus in existing.Skip(names.Count))
+        {
+            surplus.IsDeleted = true;
+            job.InterviewRounds.Remove(surplus);
+        }
     }
 
     private static void ApplyRequest(Job job, JobWriteRequest request, IReadOnlyDictionary<long, Skill> skills)
@@ -237,6 +265,11 @@ public sealed class JobService(
                 skill.Skill.Category,
                 skill.SkillType,
                 skill.MinYears)).ToArray(),
+            job.InterviewRounds
+                .Where(round => !round.IsDeleted)
+                .OrderBy(round => round.Sequence)
+                .Select(round => new InterviewRoundResponse(round.Id, round.Sequence, round.Name))
+                .ToArray(),
             job.Assignments
                 .Where(assignment => assignment.IsActive)
                 .Select(assignment => new JobAssignmentResponse(

@@ -15,6 +15,18 @@ vi.mock('./useUsers', () => ({
   useUpdateUser: () => ({ mutateAsync: mocks.update, reset: vi.fn(), isPending: false, isError: false, error: null }),
 }))
 
+vi.mock('@/features/companies/useCompanies', () => ({
+  useCompanies: () => ({
+    isLoading: false,
+    data: {
+      items: [
+        { id: 42, name: 'Acme', isActive: true },
+        { id: 43, name: 'Dormant Ltd', isActive: false },
+      ],
+    },
+  }),
+}))
+
 const existing: User = {
   id: 7,
   email: 'admin@example.test',
@@ -23,6 +35,8 @@ const existing: User = {
   isActive: true,
   lastLoginAt: null,
   createdAt: '2026-01-01T00:00:00Z',
+  companyId: null,
+  companyName: null,
 }
 
 function conflict(title: string) {
@@ -93,5 +107,49 @@ describe('UserFormDialog', () => {
 
     expect(screen.getByRole('checkbox', { name: /admin/i })).toBeDisabled()
     expect(screen.queryByLabelText(/initial password/i)).not.toBeInTheDocument()
+  })
+
+  it('requires a company for vendors and keeps Vendor exclusive', async () => {
+    const user = userEvent.setup()
+    mocks.create.mockResolvedValue({ ...existing, id: 12 })
+    render(<UserFormDialog open onOpenChange={vi.fn()} />)
+
+    expect(screen.queryByRole('combobox', { name: 'Company' })).not.toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Full name' }), 'Vee Vendor')
+    await user.type(screen.getByRole('textbox', { name: 'Email' }), 'vee@acme.test')
+    await user.click(screen.getByRole('button', { name: /generate a strong password/i }))
+    await user.click(screen.getByRole('checkbox', { name: /vendor/i }))
+
+    expect(screen.getByRole('checkbox', { name: /recruiter/i })).not.toBeChecked()
+    const company = screen.getByRole('combobox', { name: 'Company' })
+    expect(screen.getByRole('option', { name: 'Dormant Ltd (inactive)' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
+    expect(await screen.findByText('Select the company this vendor belongs to.')).toBeInTheDocument()
+    expect(mocks.create).not.toHaveBeenCalled()
+
+    await user.selectOptions(company, 'Acme')
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1))
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({ roles: ['Vendor'], companyId: 42 })
+
+    // Picking a staff role again drops Vendor and hides the company field.
+    await user.click(screen.getByRole('checkbox', { name: /recruiter/i }))
+    expect(screen.getByRole('checkbox', { name: /vendor/i })).not.toBeChecked()
+    expect(screen.queryByRole('combobox', { name: 'Company' })).not.toBeInTheDocument()
+  })
+
+  it('sends no company for staff users', async () => {
+    const user = userEvent.setup()
+    mocks.create.mockResolvedValue({ ...existing, id: 13 })
+    render(<UserFormDialog open onOpenChange={vi.fn()} />)
+
+    await user.type(screen.getByRole('textbox', { name: 'Full name' }), 'Riya')
+    await user.type(screen.getByRole('textbox', { name: 'Email' }), 'riya@example.test')
+    await user.type(screen.getByLabelText(/initial password/i), 'long-enough-password')
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
+
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1))
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({ roles: ['Recruiter'], companyId: null })
   })
 })

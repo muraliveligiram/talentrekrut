@@ -16,6 +16,7 @@ import { useAuth } from '@/features/auth/useAuth'
 import { getErrorMessage } from '@/lib/api-error'
 import { formatDate } from '@/lib/utils'
 import { ApplicationCard } from './ApplicationCard'
+import { RemoveApplicationDialog } from './RemoveApplicationDialog'
 import { formatLpa, levelLabels, noticeLabel, type Application } from './candidateTypes'
 import { SubmitToJobDialog } from './SubmitToJobDialog'
 import { useCandidate, useDeleteCandidate } from './useCandidates'
@@ -38,6 +39,7 @@ export function CandidateDetailsPage() {
   const remove = useDeleteCandidate()
   const [submitOpen, setSubmitOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [removing, setRemoving] = useState<Application | null>(null)
   const [workflow, setWorkflow] = useState<{ application: Application; action: WorkflowAction } | null>(null)
 
   if (query.isLoading) return <PageLoader label="Loading candidate…" />
@@ -118,6 +120,7 @@ export function CandidateDetailsPage() {
                   application={application}
                   context="candidate"
                   onAction={(app, action) => setWorkflow({ application: app, action })}
+                  onRemove={isAdmin ? setRemoving : undefined}
                 />
               ))
             ) : (
@@ -225,6 +228,7 @@ export function CandidateDetailsPage() {
         action={workflow?.action ?? null}
         onClose={() => setWorkflow(null)}
       />
+      {isAdmin && <RemoveApplicationDialog application={removing} onClose={() => setRemoving(null)} />}
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

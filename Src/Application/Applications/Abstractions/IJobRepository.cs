@@ -9,16 +9,14 @@ public interface IJobRepository
         string? search,
         long? companyId,
         JobStatus? status,
-        bool isAdmin,
-        long? recruiterUserId,
+        AccessScope scope,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);
 
     Task<Job?> GetByIdAsync(
         long id,
-        bool isAdmin,
-        long? recruiterUserId,
+        AccessScope scope,
         CancellationToken cancellationToken = default);
 
     Task<Company?> GetActiveCompanyAsync(long companyId, CancellationToken cancellationToken = default);

@@ -10,6 +10,15 @@ public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor)
         .Select(claim => claim.Value)
         .ToArray() ?? [];
 
+    public long? CompanyId
+    {
+        get
+        {
+            var value = httpContextAccessor.HttpContext?.User.FindFirstValue(AppClaimTypes.CompanyId);
+            return long.TryParse(value, out var companyId) ? companyId : null;
+        }
+    }
+
     public long? UserId
     {
         get

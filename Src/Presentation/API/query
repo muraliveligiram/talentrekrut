@@ -1,0 +1,4 @@
+
+select * from Users where UserName = 'admin' and Password = 'admin123';
+
+select * from userroles

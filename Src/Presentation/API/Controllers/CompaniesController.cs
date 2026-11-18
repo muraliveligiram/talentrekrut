@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = RoleNames.Staff)]
 [Route("api/companies")]
 public sealed class CompaniesController(ICompanyService companyService) : ControllerBase
 {

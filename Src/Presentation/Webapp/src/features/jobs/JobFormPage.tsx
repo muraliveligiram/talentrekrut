@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useMemo } from 'react'
-import { Controller, useForm, useWatch } from 'react-hook-form'
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -23,6 +23,9 @@ import { useJob, useSaveJob } from './useJobs'
 const employmentTypes: EmploymentType[] = ['FullTime', 'PartTime', 'Contract', 'Temporary', 'Internship']
 const workModes: WorkMode[] = ['Onsite', 'Remote', 'Hybrid']
 
+const MAX_ROUNDS = 10
+const ROUND_SUGGESTIONS = ['Coding test', 'Technical interview', 'Face to face', 'Managerial round', 'Client interview', 'HR discussion']
+
 const skillOption = z.object({ value: z.number(), label: z.string(), group: z.string().optional() })
 
 const jobSchema = z.object({
@@ -39,6 +42,21 @@ const jobSchema = z.object({
   primarySkills: z.array(skillOption).min(1, 'At least one primary skill is required.').max(30),
   secondarySkills: z.array(skillOption).max(30),
   goodToHaveSkills: z.array(skillOption).max(30),
+  interviewRounds: z
+    .array(z.object({ name: z.string().trim().min(1, 'Name this round.').max(100, 'Keep round names under 100 characters.') }))
+    .min(1, 'Add at least one interview round.')
+    .max(MAX_ROUNDS)
+    .superRefine((rounds, context) => {
+      const seen = new Map<string, number>()
+      rounds.forEach((round, index) => {
+        const key = round.name.trim().toLowerCase()
+        if (!key) return
+        if (seen.has(key)) {
+          context.addIssue({ code: 'custom', path: [index, 'name'], message: 'Each round needs a different name.' })
+        }
+        seen.set(key, index)
+      })
+    }),
 }).refine((job) => job.minExperienceYears <= job.maxExperienceYears, {
   path: ['maxExperienceYears'],
   message: 'Maximum experience must be at least minimum experience.',
@@ -60,6 +78,7 @@ const emptyValues: JobFormValues = {
   primarySkills: [],
   secondarySkills: [],
   goodToHaveSkills: [],
+  interviewRounds: [{ name: '' }],
 }
 
 function skillsOfType(skills: JobSkill[], type: JobSkillType): MultiSelectOption[] {
@@ -76,6 +95,7 @@ export function JobFormPage() {
     control,
     register,
     reset,
+    setValue,
     handleSubmit,
     formState: { errors },
   } = useForm<JobFormValues>({
@@ -86,6 +106,28 @@ export function JobFormPage() {
     control,
     name: ['primarySkills', 'secondarySkills', 'goodToHaveSkills'],
   })
+  const rounds = useFieldArray({ control, name: 'interviewRounds' })
+  const roundNames = useWatch({ control, name: 'interviewRounds' })
+
+  const setRoundCount = (count: number) => {
+    if (count > rounds.fields.length) {
+      rounds.append(Array.from({ length: count - rounds.fields.length }, () => ({ name: '' })))
+    } else {
+      rounds.remove(Array.from({ length: rounds.fields.length - count }, (_, index) => count + index))
+    }
+  }
+
+  /** Fills the first empty round with a suggestion, adding a round if all are named. */
+  const applySuggestion = (name: string) => {
+    const emptyIndex = roundNames.findIndex((round) => !round.name.trim())
+    if (emptyIndex >= 0) {
+      setValue(`interviewRounds.${emptyIndex}.name`, name, { shouldValidate: true })
+    } else if (rounds.fields.length < MAX_ROUNDS) {
+      rounds.append({ name })
+    }
+  }
+  const usedSuggestions = new Set(roundNames.map((round) => round.name.trim().toLowerCase()))
+
   const ids = (options: MultiSelectOption[]) => options.map((option) => option.value)
   // Minimum years is no longer edited in the form; keep any values already stored on the job.
   const existingMinYears = useMemo(
@@ -109,15 +151,20 @@ export function JobFormPage() {
         primarySkills: skillsOfType(jobQuery.data.skills, 'Primary'),
         secondarySkills: skillsOfType(jobQuery.data.skills, 'Secondary'),
         goodToHaveSkills: skillsOfType(jobQuery.data.skills, 'GoodToHave'),
+        // Jobs created before interview rounds existed start with one empty round to fill in.
+        interviewRounds: jobQuery.data.interviewRounds.length
+          ? jobQuery.data.interviewRounds.map((round) => ({ name: round.name }))
+          : [{ name: '' }],
       })
     }
   }, [jobQuery.data, reset])
 
-  const submit = handleSubmit(({ primarySkills, secondarySkills, goodToHaveSkills, ...job }) => {
+  const submit = handleSubmit(({ primarySkills, secondarySkills, goodToHaveSkills, interviewRounds, ...job }) => {
     const toRequest = (options: MultiSelectOption[], skillType: JobSkillType) =>
       options.map((option) => ({ skillId: option.value, skillType, minYears: existingMinYears.get(option.value) ?? null }))
     const request = {
       ...job,
+      interviewRounds: interviewRounds.map((round) => round.name.trim()),
       skills: [
         ...toRequest(primarySkills, 'Primary'),
         ...toRequest(secondarySkills, 'Secondary'),
@@ -221,6 +268,64 @@ export function JobFormPage() {
             >
               <Input placeholder="e.g. Fluent English, client-facing" {...register('communicationRequirement')} />
             </Field>
+          </FormSection>
+
+          <FormSection
+            title="Interview process"
+            description="How many interview rounds this role has, in order. Shown to the team and the client."
+          >
+            <Field label="Number of rounds" required className="sm:col-span-2 sm:max-w-48">
+              <Select
+                value={rounds.fields.length}
+                onChange={(event) => setRoundCount(Number(event.target.value))}
+              >
+                {Array.from({ length: MAX_ROUNDS }, (_, index) => index + 1).map((count) => (
+                  <option key={count} value={count}>
+                    {count} {count === 1 ? 'round' : 'rounds'}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <ol className="flex flex-col gap-3 sm:col-span-2">
+              {rounds.fields.map((field, index) => (
+                <li key={field.id} className="flex items-start gap-3">
+                  <span
+                    aria-hidden
+                    className="mt-7 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-soft-foreground"
+                  >
+                    {index + 1}
+                  </span>
+                  <Field
+                    label={`Round ${index + 1} name`}
+                    required
+                    error={errors.interviewRounds?.[index]?.name?.message}
+                    className="flex-1"
+                  >
+                    <Input
+                      placeholder={`e.g. ${ROUND_SUGGESTIONS[index % ROUND_SUGGESTIONS.length]}`}
+                      {...register(`interviewRounds.${index}.name`)}
+                    />
+                  </Field>
+                </li>
+              ))}
+            </ol>
+            {errors.interviewRounds?.root?.message && (
+              <p className="text-xs font-medium text-danger sm:col-span-2">{errors.interviewRounds.root.message}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2">
+              <span className="text-xs text-muted">Quick add:</span>
+              {ROUND_SUGGESTIONS.filter((name) => !usedSuggestions.has(name.toLowerCase())).map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => applySuggestion(name)}
+                  disabled={!roundNames.some((round) => !round.name.trim()) && rounds.fields.length >= MAX_ROUNDS}
+                  className="rounded-full border px-2.5 py-0.5 text-xs text-muted transition-colors hover:border-primary/50 hover:bg-primary-soft/50 hover:text-foreground disabled:opacity-50"
+                >
+                  + {name}
+                </button>
+              ))}
+            </div>
           </FormSection>
 
           <FormSection

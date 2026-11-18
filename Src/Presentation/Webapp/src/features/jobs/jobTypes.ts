@@ -15,6 +15,12 @@ export interface JobSkill {
   minYears: number | null
 }
 
+export interface InterviewRound {
+  id: number
+  sequence: number
+  name: string
+}
+
 export interface JobAssignment {
   recruiterUserId: number
   recruiterName: string
@@ -38,6 +44,7 @@ export interface Job {
   communicationRequirement: string | null
   status: JobStatus
   skills: JobSkill[]
+  interviewRounds: InterviewRound[]
   assignments: JobAssignment[]
   createdAt: string
 }
@@ -60,6 +67,7 @@ export interface JobWriteRequest {
   workMode: WorkMode
   communicationRequirement?: string
   skills: JobSkillWriteRequest[]
+  interviewRounds: string[]
 }
 
 export interface Recruiter {

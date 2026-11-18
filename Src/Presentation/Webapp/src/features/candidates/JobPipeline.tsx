@@ -11,10 +11,24 @@ import { saveBlob } from '@/lib/download'
 import { cn } from '@/lib/utils'
 import { ApplicationCard } from './ApplicationCard'
 import { STAGES, stageLabels, type Application, type ApplicationStage } from './candidateTypes'
+import { RemoveApplicationDialog } from './RemoveApplicationDialog'
 import { useExportJobApplications, useJobApplications } from './useCandidates'
 import { WorkflowDialog, type WorkflowAction } from './WorkflowDialogs'
 
-export function JobPipeline({ jobId, isOpen }: { jobId: string; isOpen: boolean }) {
+interface JobPipelineProps {
+  jobId: string
+  isOpen: boolean
+  /**
+   * Staff can add candidates, export and open profiles. Vendors only move candidates through
+   * the workflow and see a redacted view.
+   */
+  isStaff?: boolean
+  /** Admins can remove candidates from the job. */
+  isAdmin?: boolean
+}
+
+export function JobPipeline({ jobId, isOpen, isStaff = true, isAdmin = false }: JobPipelineProps) {
+  const [removing, setRemoving] = useState<Application | null>(null)
   const query = useJobApplications(jobId)
   const exportToExcel = useExportJobApplications()
   const [filter, setFilter] = useState<ApplicationStage | ''>('')
@@ -43,7 +57,7 @@ export function JobPipeline({ jobId, isOpen }: { jobId: string; isOpen: boolean 
           Pipeline <span className="font-normal text-muted">({applications.length})</span>
         </CardTitle>
         <div className="flex flex-wrap gap-2">
-          {applications.length > 0 && (
+          {isStaff && applications.length > 0 && (
             <Button
               size="sm"
               variant="outline"
@@ -55,7 +69,7 @@ export function JobPipeline({ jobId, isOpen }: { jobId: string; isOpen: boolean 
               Export to Excel
             </Button>
           )}
-          {isOpen && (
+          {isStaff && isOpen && (
             <ButtonLink to={`/candidates/new?jobId=${jobId}`} size="sm" variant="outline">
               <UserPlus />
               Add candidate
@@ -94,7 +108,13 @@ export function JobPipeline({ jobId, isOpen }: { jobId: string; isOpen: boolean 
           <EmptyState
             icon={UserSquare2}
             title="No candidates yet"
-            description={isOpen ? 'Add a candidate to start screening for this job.' : 'Open this job to accept candidates.'}
+            description={
+              !isStaff
+                ? 'Candidates submitted for this job will appear here.'
+                : isOpen
+                  ? 'Add a candidate to start screening for this job.'
+                  : 'Open this job to accept candidates.'
+            }
           />
         ) : visible.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">No candidates in this stage.</p>
@@ -105,6 +125,8 @@ export function JobPipeline({ jobId, isOpen }: { jobId: string; isOpen: boolean 
                 key={application.id}
                 application={application}
                 context="job"
+                linkToCandidate={isStaff}
+                onRemove={isAdmin ? setRemoving : undefined}
                 onAction={(app: Application, action) => setWorkflow({ id: app.id, action })}
               />
             ))}
@@ -112,6 +134,7 @@ export function JobPipeline({ jobId, isOpen }: { jobId: string; isOpen: boolean 
         )}
       </CardContent>
       <WorkflowDialog application={active} action={workflow?.action ?? null} onClose={() => setWorkflow(null)} />
+      {isAdmin && <RemoveApplicationDialog application={removing} onClose={() => setRemoving(null)} />}
     </Card>
   )
 }

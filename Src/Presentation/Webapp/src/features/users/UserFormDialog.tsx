@@ -1,18 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Wand2 } from 'lucide-react'
 import { useEffect } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import { Field } from '@/components/ui/field'
-import { Checkbox, Input } from '@/components/ui/input'
+import { Checkbox, Input, Select } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { getErrorMessage, getStatus } from '@/lib/api-error'
 import { generatePassword, MIN_PASSWORD_LENGTH } from '@/lib/password'
 import { cn } from '@/lib/utils'
+import { useCompanies } from '@/features/companies/useCompanies'
 import { useCreateUser, useUpdateUser } from './useUsers'
 import { ROLES, roleDescriptions, type User } from './userTypes'
 
@@ -21,6 +22,7 @@ const baseSchema = z.object({
   email: z.string().trim().min(1, 'Email is required.').email('Enter a valid email address.').max(200),
   roles: z.array(z.enum(ROLES)).min(1, 'Select at least one role.'),
   password: z.string(),
+  companyId: z.string(),
 })
 
 const createSchema = baseSchema.extend({
@@ -30,6 +32,18 @@ const createSchema = baseSchema.extend({
     .max(128)
     .refine((value) => value.trim() === value, 'Password must not start or end with a space.'),
 })
+
+/** Vendors belong to exactly one company and hold no other role. */
+function withVendorRules(schema: z.ZodType<z.infer<typeof baseSchema>, z.input<typeof baseSchema>>) {
+  return schema.superRefine((values, context) => {
+    if (values.roles.includes('Vendor') && !values.companyId) {
+      context.addIssue({ code: 'custom', path: ['companyId'], message: 'Select the company this vendor belongs to.' })
+    }
+    if (values.roles.includes('Vendor') && values.roles.length > 1) {
+      context.addIssue({ code: 'custom', path: ['roles'], message: 'Vendor cannot be combined with other roles.' })
+    }
+  })
+}
 
 type UserFormValues = z.infer<typeof baseSchema>
 
@@ -56,8 +70,8 @@ export function UserFormDialog({ open, onOpenChange, user, currentUserId }: User
     handleSubmit,
     formState: { errors },
   } = useForm<UserFormValues>({
-    resolver: zodResolver(isEdit ? baseSchema : createSchema),
-    defaultValues: { fullName: '', email: '', roles: ['Recruiter'], password: '' },
+    resolver: zodResolver(withVendorRules(isEdit ? baseSchema : createSchema)),
+    defaultValues: { fullName: '', email: '', roles: ['Recruiter'], password: '', companyId: '' },
   })
 
   useEffect(() => {
@@ -66,24 +80,25 @@ export function UserFormDialog({ open, onOpenChange, user, currentUserId }: User
       updateUser.reset()
       reset(
         user
-          ? { fullName: user.fullName, email: user.email, roles: user.roles, password: '' }
-          : { fullName: '', email: '', roles: ['Recruiter'], password: '' },
+          ? { fullName: user.fullName, email: user.email, roles: user.roles, password: '', companyId: user.companyId ? String(user.companyId) : '' }
+          : { fullName: '', email: '', roles: ['Recruiter'], password: '', companyId: '' },
       )
     }
     // Reset only when the dialog opens or switches user.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, user, reset])
 
-  const submit = handleSubmit(async (values) => {
+  const submit = handleSubmit(async ({ companyId: rawCompanyId, ...values }) => {
+    const companyId = values.roles.includes('Vendor') && rawCompanyId ? Number(rawCompanyId) : null
     try {
       if (user) {
         await updateUser.mutateAsync({
           id: user.id,
-          request: { fullName: values.fullName, email: values.email, roles: values.roles, isActive: user.isActive },
+          request: { fullName: values.fullName, email: values.email, roles: values.roles, isActive: user.isActive, companyId },
         })
         toast.success('User updated', { description: values.fullName })
       } else {
-        await createUser.mutateAsync(values)
+        await createUser.mutateAsync({ ...values, companyId })
         toast.success('User created', {
           description: `${values.fullName} can now sign in with the password you set.`,
         })
@@ -98,6 +113,11 @@ export function UserFormDialog({ open, onOpenChange, user, currentUserId }: User
   })
 
   const showGeneralError = mutation.isError && !errors.email
+  const selectedRoles = useWatch({ control, name: 'roles' })
+  const isVendor = selectedRoles.includes('Vendor')
+  const companiesQuery = useCompanies('', 1, 100, open && isVendor)
+  const companies = companiesQuery.data?.items ?? []
+  const currentCompanyId = user?.companyId ? String(user.companyId) : ''
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,13 +182,16 @@ export function UserFormDialog({ open, onOpenChange, user, currentUserId }: User
                         className="mt-0.5"
                         checked={checked}
                         disabled={locked}
-                        onChange={(event) =>
-                          field.onChange(
-                            event.target.checked
-                              ? [...field.value, role]
-                              : field.value.filter((value) => value !== role),
-                          )
-                        }
+                        onChange={(event) => {
+                          if (!event.target.checked) {
+                            field.onChange(field.value.filter((value) => value !== role))
+                          } else if (role === 'Vendor') {
+                            // Vendor is exclusive: selecting it replaces any staff roles.
+                            field.onChange(['Vendor'])
+                          } else {
+                            field.onChange([...field.value.filter((value) => value !== 'Vendor'), role])
+                          }
+                        }}
                       />
                       <span className="flex flex-col">
                         <span className="text-sm font-medium">{role}</span>
@@ -183,6 +206,25 @@ export function UserFormDialog({ open, onOpenChange, user, currentUserId }: User
               </fieldset>
             )}
           />
+
+          {isVendor && (
+            <Field
+              label="Company"
+              required
+              error={errors.companyId?.message}
+              hint="The vendor will only see this company's job postings."
+            >
+              <Select {...register('companyId')} disabled={companiesQuery.isLoading}>
+                <option value="">{companiesQuery.isLoading ? 'Loading companies…' : 'Select a company…'}</option>
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id} disabled={!company.isActive && String(company.id) !== currentCompanyId}>
+                    {company.name}
+                    {company.isActive ? '' : ' (inactive)'}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
 
           <DialogFooter>
             <DialogClose asChild>

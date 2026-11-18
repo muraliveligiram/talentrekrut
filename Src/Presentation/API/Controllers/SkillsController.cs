@@ -9,7 +9,7 @@ namespace API.Controllers;
 
 /// <summary>The shared skill library. Admins and recruiters can add skills; only admins edit or deactivate them.</summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = RoleNames.Staff)]
 [Route("api/skills")]
 public sealed class SkillsController(ISkillService skillService) : ControllerBase
 {
@@ -34,7 +34,6 @@ public sealed class SkillsController(ISkillService skillService) : ControllerBas
     }
 
     [HttpPost]
-    [Authorize(Roles = $"{RoleNames.Admin},{RoleNames.Recruiter}")]
     [ProducesResponseType(typeof(CreateSkillsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateSkillsResponse>> Create(

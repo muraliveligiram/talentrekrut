@@ -20,9 +20,9 @@ export const navigation: NavSection[] = [
     title: 'Recruitment',
     items: [
       { label: 'Jobs', to: '/jobs', icon: Briefcase },
-      { label: 'Candidates', to: '/candidates', icon: UserSquare2 },
+      { label: 'Candidates', to: '/candidates', icon: UserSquare2, roles: ['Admin', 'Recruiter'] },
       { label: 'Companies', to: '/companies', icon: Building2, roles: ['Admin'] },
-      { label: 'Skill library', to: '/skills', icon: Tags },
+      { label: 'Skill library', to: '/skills', icon: Tags, roles: ['Admin', 'Recruiter'] },
     ],
   },
   {

@@ -134,6 +134,9 @@ public static class CandidateExportWorkbook
             ("Job status", DisplayNames.Of(export.JobStatus)),
             ("Location", Text(export.Location)),
             ("Openings", export.Openings),
+            ("Interview rounds", export.InterviewRounds.Count > 0
+                ? string.Join("  →  ", export.InterviewRounds.Select((name, index) => $"{index + 1}. {name}"))
+                : Blank.Value),
             ("Total candidates", export.Rows.Count),
             ("Exported at", Local(generatedAt, timeZone)),
             ("Time zone", timeZone.Id)

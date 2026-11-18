@@ -15,6 +15,8 @@ public sealed class JobWriteRequest
     public WorkMode WorkMode { get; set; }
     public string? CommunicationRequirement { get; set; }
     public List<JobSkillWriteRequest> Skills { get; set; } = [];
+    /// <summary>Interview round names in order, e.g. ["Coding test", "Face to face", "HR discussion"].</summary>
+    public List<string> InterviewRounds { get; set; } = [];
 }
 
 public sealed class JobSkillWriteRequest

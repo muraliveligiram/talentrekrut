@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Applications.Abstractions;
 using Applications.Contracts;
 using Applications.Exceptions;
@@ -13,13 +14,12 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
         string? search,
         long? companyId,
         JobStatus? status,
-        bool isAdmin,
-        long? recruiterUserId,
+        AccessScope scope,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var query = context.Jobs.AsNoTracking();
+        var query = context.Jobs.AsNoTracking().Where(JobsVisibleTo(scope));
         if (companyId.HasValue)
         {
             query = query.Where(job => job.CompanyId == companyId.Value);
@@ -39,20 +39,6 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
                 || (job.Location != null && job.Location.ToUpper().Contains(normalizedSearch)));
         }
 
-        if (!isAdmin)
-        {
-            if (recruiterUserId is null)
-            {
-                query = query.Where(_ => false);
-            }
-            else
-            {
-                var userId = recruiterUserId.Value;
-                query = query.Where(job => job.Assignments.Any(assignment =>
-                    assignment.IsActive && assignment.RecruiterUserId == userId));
-            }
-        }
-
         var totalCount = await query.CountAsync(cancellationToken);
         var jobs = await query
             .OrderByDescending(job => job.CreatedAt)
@@ -61,6 +47,7 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
             .Include(job => job.Company)
             .Include(job => job.Skills)
                 .ThenInclude(jobSkill => jobSkill.Skill)
+            .Include(job => job.InterviewRounds)
             .Include(job => job.Assignments.Where(assignment => assignment.IsActive))
                 .ThenInclude(assignment => assignment.Recruiter)
             .ToListAsync(cancellationToken);
@@ -69,31 +56,41 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
 
     public async Task<Job?> GetByIdAsync(
         long id,
-        bool isAdmin,
-        long? recruiterUserId,
+        AccessScope scope,
         CancellationToken cancellationToken = default)
     {
         var query = context.Jobs
+            .Where(JobsVisibleTo(scope))
             .Include(job => job.Company)
             .Include(job => job.Skills)
                 .ThenInclude(jobSkill => jobSkill.Skill)
+            .Include(job => job.InterviewRounds)
             .Include(job => job.Assignments.Where(assignment => assignment.IsActive))
                 .ThenInclude(assignment => assignment.Recruiter)
             .AsQueryable();
 
-        if (!isAdmin)
-        {
-            if (recruiterUserId is null)
-            {
-                return null;
-            }
+        return await query.SingleOrDefaultAsync(job => job.Id == id, cancellationToken);
+    }
 
-            var userId = recruiterUserId.Value;
-            query = query.Where(job => job.Assignments.Any(assignment =>
-                assignment.IsActive && assignment.RecruiterUserId == userId));
+    /// <summary>
+    /// Admins see every job; vendors see their own company's jobs once they leave Draft;
+    /// recruiters see the jobs actively assigned to them.
+    /// </summary>
+    private static Expression<Func<Job, bool>> JobsVisibleTo(AccessScope scope)
+    {
+        if (scope.IsAdmin)
+        {
+            return _ => true;
         }
 
-        return await query.SingleOrDefaultAsync(job => job.Id == id, cancellationToken);
+        if (scope.IsVendor)
+        {
+            var companyId = scope.VendorCompanyId!.Value;
+            return job => job.CompanyId == companyId && job.Status != JobStatus.Draft;
+        }
+
+        var userId = scope.UserId ?? -1;
+        return job => job.Assignments.Any(assignment => assignment.IsActive && assignment.RecruiterUserId == userId);
     }
 
     public Task<Company?> GetActiveCompanyAsync(

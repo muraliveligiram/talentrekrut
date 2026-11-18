@@ -9,7 +9,29 @@ internal static class UserRules
     public const int MinimumPasswordLength = 12;
     public const int MaximumPasswordLength = 128;
 
-    private static readonly string[] AssignableRoles = [RoleNames.Admin, RoleNames.Recruiter];
+    private static readonly string[] AssignableRoles = [RoleNames.Admin, RoleNames.Recruiter, RoleNames.Vendor];
+
+    public static bool IsVendor(IEnumerable<string>? roles) =>
+        roles?.Contains(RoleNames.Vendor, StringComparer.OrdinalIgnoreCase) == true;
+
+    /// <summary>Vendors must belong to exactly one company and cannot also hold a staff role.</summary>
+    public static void VendorRules<T>(AbstractValidator<T> validator, Func<T, List<string>> roles, Func<T, long?> companyId)
+    {
+        validator.RuleFor(request => roles(request))
+            .Must(value => !IsVendor(value) || value.Count(role => !string.IsNullOrWhiteSpace(role)) == 1)
+            .WithName("Roles")
+            .WithMessage("The Vendor role cannot be combined with Admin or Recruiter.");
+        validator.RuleFor(request => companyId(request))
+            .Must(id => id is > 0)
+            .When(request => IsVendor(roles(request)))
+            .WithName("CompanyId")
+            .WithMessage("Select the company this vendor belongs to.");
+        validator.RuleFor(request => companyId(request))
+            .Null()
+            .When(request => !IsVendor(roles(request)))
+            .WithName("CompanyId")
+            .WithMessage("Only vendor users can be linked to a company.");
+    }
 
     public static IRuleBuilderOptions<T, string> ValidPassword<T>(this IRuleBuilder<T, string> rule)
     {
@@ -42,6 +64,7 @@ public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserReq
         RuleFor(request => request.FullName).NotEmpty().MaximumLength(200);
         RuleFor(request => request.Password).ValidPassword();
         RuleFor(request => request.Roles).ValidRoles();
+        UserRules.VendorRules(this, request => request.Roles, request => request.CompanyId);
     }
 }
 
@@ -52,6 +75,7 @@ public sealed class UpdateUserRequestValidator : AbstractValidator<UpdateUserReq
         RuleFor(request => request.Email).NotEmpty().EmailAddress().MaximumLength(200);
         RuleFor(request => request.FullName).NotEmpty().MaximumLength(200);
         RuleFor(request => request.Roles).ValidRoles();
+        UserRules.VendorRules(this, request => request.Roles, request => request.CompanyId);
     }
 }
 

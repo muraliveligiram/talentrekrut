@@ -4,17 +4,26 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { DashboardPage } from './DashboardPage'
 
+const auth = vi.hoisted(() => ({ roles: ['Admin'] as string[] }))
+
 vi.mock('@/features/auth/useAuth', () => ({
-  useAuth: () => ({ roles: ['Admin'], user: { id: 1, name: 'Ada Admin', email: 'ada@example.test' } }),
+  useAuth: () => ({ roles: auth.roles, user: { id: 1, name: 'Ada Admin', email: 'ada@example.test' } }),
+  useRoleFlags: () => {
+    const isAdmin = auth.roles.includes('Admin')
+    const isStaff = isAdmin || auth.roles.includes('Recruiter')
+    return { isAdmin, isStaff, isVendor: !isStaff && auth.roles.includes('Vendor') }
+  },
 }))
 
 vi.mock('@/features/jobs/jobsApi', () => ({
   getJobs: vi.fn(async () => ({ items: [], totalCount: 7, page: 1, pageSize: 1 })),
 }))
 
+const candidatesApi = vi.hoisted(() => ({ stats: vi.fn(), insights: vi.fn() }))
+
 vi.mock('@/features/candidates/candidatesApi', () => ({
-  getPipelineStats: vi.fn(async () => ({ activeCandidates: 12, interviewsInRange: 3 })),
-  getPipelineInsights: vi.fn(async () => ({
+  getPipelineStats: candidatesApi.stats.mockImplementation(async () => ({ activeCandidates: 12, interviewsInRange: 3 })),
+  getPipelineInsights: candidatesApi.insights.mockImplementation(async () => ({
     days: 60,
     from: '2026-09-17T00:00:00Z',
     to: '2026-11-16T00:00:00Z',
@@ -39,6 +48,22 @@ function renderDashboard() {
 }
 
 describe('DashboardPage', () => {
+  it('shows vendors only their job postings, with no candidate data', async () => {
+    auth.roles = ['Vendor']
+    candidatesApi.stats.mockClear()
+    candidatesApi.insights.mockClear()
+    renderDashboard()
+
+    expect(await screen.findByText("Your company's job postings at a glance.")).toBeInTheDocument()
+    expect(screen.getByText('On hold')).toBeInTheDocument()
+    expect(screen.getByText('Closed')).toBeInTheDocument()
+    expect(screen.queryByText('Active candidates')).not.toBeInTheDocument()
+    expect(screen.queryByText('Recruiter activity')).not.toBeInTheDocument()
+    expect(candidatesApi.stats).not.toHaveBeenCalled()
+    expect(candidatesApi.insights).not.toHaveBeenCalled()
+    auth.roles = ['Admin']
+  })
+
   it('shows 60-day selections, outcomes and recruiter activity instead of active users', async () => {
     renderDashboard()
 

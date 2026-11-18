@@ -86,7 +86,9 @@ export interface Application {
   candidateId: number
   candidateName: string
   candidateRole: string
-  candidateCompany: string
+  /** Hidden (null) for vendors. */
+  candidateCompany: string | null
+  candidateLevel: CandidateLevel
   jobId: number
   jobCode: string
   jobTitle: string

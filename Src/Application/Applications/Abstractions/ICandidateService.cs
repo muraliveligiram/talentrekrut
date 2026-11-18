@@ -27,6 +27,8 @@ public interface IApplicationService
     Task<ApplicationResponse?> ScreenAsync(long id, ScreeningDecisionRequest request, CancellationToken cancellationToken = default);
     Task<ApplicationResponse?> ScheduleInterviewAsync(long id, ScheduleInterviewRequest request, CancellationToken cancellationToken = default);
     Task<ApplicationResponse?> RecordOutcomeAsync(long id, InterviewOutcomeRequest request, CancellationToken cancellationToken = default);
+    /// <summary>Takes a candidate off one job's pipeline. The candidate and their other applications are kept.</summary>
+    Task<bool> RemoveAsync(long id, CancellationToken cancellationToken = default);
     Task<JobCandidateExport?> GetJobExportAsync(long jobId, CancellationToken cancellationToken = default);
     Task<PipelineInsightsResponse> GetInsightsAsync(int days, CancellationToken cancellationToken = default);
     Task<PipelineStatsResponse> GetStatsAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);

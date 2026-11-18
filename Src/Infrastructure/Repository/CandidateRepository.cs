@@ -100,6 +100,7 @@ public sealed class CandidateRepository(RekrutDbContext context) : ICandidateRep
     {
         return context.Jobs
             .Include(job => job.Company)
+            .Include(job => job.InterviewRounds)
             .Where(JobVisibleTo(scope))
             .SingleOrDefaultAsync(job => job.Id == jobId, cancellationToken);
     }
@@ -224,6 +225,12 @@ public sealed class CandidateRepository(RekrutDbContext context) : ICandidateRep
             return _ => true;
         }
 
+        if (scope.IsVendor)
+        {
+            var companyId = scope.VendorCompanyId!.Value;
+            return job => job.CompanyId == companyId && job.Status != JobStatus.Draft;
+        }
+
         var userId = scope.UserId ?? -1;
         return job => job.Assignments.Any(assignment => assignment.IsActive && assignment.RecruiterUserId == userId);
     }
@@ -233,6 +240,12 @@ public sealed class CandidateRepository(RekrutDbContext context) : ICandidateRep
         if (scope.IsAdmin)
         {
             return _ => true;
+        }
+
+        if (scope.IsVendor)
+        {
+            var companyId = scope.VendorCompanyId!.Value;
+            return application => application.Job.CompanyId == companyId && application.Job.Status != JobStatus.Draft;
         }
 
         var userId = scope.UserId ?? -1;

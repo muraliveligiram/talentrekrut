@@ -46,6 +46,10 @@ export async function getJobApplications(jobId: string) {
   return (await http.get<Application[]>(`/jobs/${jobId}/applications`)).data
 }
 
+export async function removeApplication(id: number) {
+  await http.delete(`/applications/${id}`)
+}
+
 export async function screenApplication(
   id: number,
   request: { shortlisted: boolean; rejectionReasons: RejectionReason[]; notes: string | null },

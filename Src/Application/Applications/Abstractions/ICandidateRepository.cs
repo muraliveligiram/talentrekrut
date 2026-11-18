@@ -53,6 +53,3 @@ public interface ICandidateRepository
     Task AddApplicationAsync(JobApplication application, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }
-
-/// <summary>Who is asking: admins see everything, recruiters are limited to their own work.</summary>
-public sealed record AccessScope(bool IsAdmin, long? UserId);

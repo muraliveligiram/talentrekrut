@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = RoleNames.Staff)]
 [Route("api/candidates")]
 public sealed class CandidatesController(ICandidateService candidateService) : ControllerBase
 {

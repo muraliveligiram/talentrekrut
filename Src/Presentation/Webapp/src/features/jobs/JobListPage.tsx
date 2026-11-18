@@ -12,7 +12,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { SearchInput } from '@/components/ui/search-input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useAuth } from '@/features/auth/useAuth'
+import { useRoleFlags } from '@/features/auth/useAuth'
 import { useCompanies } from '@/features/companies/useCompanies'
 import { getErrorMessage } from '@/lib/api-error'
 import { useDebouncedValue } from '@/lib/hooks'
@@ -30,9 +30,9 @@ export function JobListPage() {
   const [companyId, setCompanyId] = useState(searchParams.get('companyId') ?? '')
   const [status, setStatus] = useState<JobStatus | ''>('')
   const [page, setPage] = useState(1)
-  const { roles } = useAuth()
-  const isAdmin = roles.includes('Admin')
-  const companiesQuery = useCompanies('', 1, 100)
+  const { isAdmin, isVendor } = useRoleFlags()
+  const companiesQuery = useCompanies('', 1, 100, !isVendor)
+  const statusOptions = isVendor ? JOB_STATUSES.filter((value) => value !== 'Draft') : JOB_STATUSES
   const debouncedSearch = useDebouncedValue(search)
   const jobsQuery = useJobs({ search: debouncedSearch, companyId, status }, page, pageSize)
   const jobs = jobsQuery.data?.items ?? []
@@ -42,7 +42,13 @@ export function JobListPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Jobs"
-        description={isAdmin ? 'Job requirements and recruiter assignments.' : 'Jobs assigned to you.'}
+        description={
+          isAdmin
+            ? 'Job requirements and recruiter assignments.'
+            : isVendor
+              ? "Your company's job postings."
+              : 'Jobs assigned to you.'
+        }
         actions={
           isAdmin && (
             <ButtonLink to="/jobs/new">
@@ -66,22 +72,24 @@ export function JobListPage() {
             className="sm:max-w-xs sm:flex-1"
           />
           <div className="flex gap-3">
-            <Select
-              aria-label="Filter by company"
-              value={companyId}
-              onChange={(event) => {
-                setCompanyId(event.target.value)
-                setPage(1)
-              }}
-              className="flex-1 sm:w-48"
-            >
-              <option value="">All companies</option>
-              {(companiesQuery.data?.items ?? []).map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </Select>
+            {!isVendor && (
+              <Select
+                aria-label="Filter by company"
+                value={companyId}
+                onChange={(event) => {
+                  setCompanyId(event.target.value)
+                  setPage(1)
+                }}
+                className="flex-1 sm:w-48"
+              >
+                <option value="">All companies</option>
+                {(companiesQuery.data?.items ?? []).map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </Select>
+            )}
             <Select
               aria-label="Filter by status"
               value={status}
@@ -92,7 +100,7 @@ export function JobListPage() {
               className="flex-1 sm:w-40"
             >
               <option value="">All statuses</option>
-              {JOB_STATUSES.map((value) => (
+              {statusOptions.map((value) => (
                 <option key={value} value={value}>
                   {humanize(value)}
                 </option>
@@ -114,7 +122,9 @@ export function JobListPage() {
                 ? 'Try different filters.'
                 : isAdmin
                   ? 'Create a job to start tracking a requirement.'
-                  : 'Jobs assigned to you will appear here.'
+                  : isVendor
+                    ? "Your company's job postings will appear here."
+                    : 'Jobs assigned to you will appear here.'
             }
             action={
               isAdmin &&
@@ -136,7 +146,7 @@ export function JobListPage() {
                   <TableHead className="hidden lg:table-cell">Location</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden text-right sm:table-cell">Openings</TableHead>
-                  <TableHead className="hidden xl:table-cell">Recruiters</TableHead>
+                  {!isVendor && <TableHead className="hidden xl:table-cell">Recruiters</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -171,24 +181,26 @@ export function JobListPage() {
                           <JobStatusBadge status={job.status} />
                         </TableCell>
                         <TableCell className="hidden text-right tabular-nums sm:table-cell">{job.openings}</TableCell>
+                        {!isVendor && (
                         <TableCell className="hidden xl:table-cell">
-                          {job.assignments.length ? (
-                            <div className="flex -space-x-2">
-                              {job.assignments.slice(0, 4).map((assignment) => (
-                                <span key={assignment.recruiterUserId} title={assignment.recruiterName}>
-                                  <Avatar name={assignment.recruiterName} className="size-7 ring-2 ring-surface" />
-                                </span>
-                              ))}
-                              {job.assignments.length > 4 && (
-                                <span className="flex size-7 items-center justify-center rounded-full bg-surface-muted text-[10px] font-medium ring-2 ring-surface">
-                                  +{job.assignments.length - 4}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted">Unassigned</span>
-                          )}
-                        </TableCell>
+                            {job.assignments.length ? (
+                              <div className="flex -space-x-2">
+                                {job.assignments.slice(0, 4).map((assignment) => (
+                                  <span key={assignment.recruiterUserId} title={assignment.recruiterName}>
+                                    <Avatar name={assignment.recruiterName} className="size-7 ring-2 ring-surface" />
+                                  </span>
+                                ))}
+                                {job.assignments.length > 4 && (
+                                  <span className="flex size-7 items-center justify-center rounded-full bg-surface-muted text-[10px] font-medium ring-2 ring-surface">
+                                    +{job.assignments.length - 4}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted">Unassigned</span>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
               </TableBody>

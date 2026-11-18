@@ -64,6 +64,8 @@ public sealed class UserService(
             IsActive = true
         };
         user.PasswordHash = passwordHashService.HashPassword(user, request.Password);
+        user.Company = await ResolveVendorCompanyAsync(request.Roles, request.CompanyId, currentCompanyId: null, cancellationToken);
+        user.CompanyId = user.Company?.Id;
         foreach (var role in await LoadRolesAsync(request.Roles, cancellationToken))
         {
             user.UserRoles.Add(new UserRole { Role = role, RoleId = role.Id });
@@ -104,6 +106,8 @@ public sealed class UserService(
         user.NormalizedEmail = normalizedEmail;
         user.FullName = request.FullName.Trim();
         user.IsActive = request.IsActive;
+        user.Company = await ResolveVendorCompanyAsync(request.Roles, request.CompanyId, user.CompanyId, cancellationToken);
+        user.CompanyId = user.Company?.Id;
         await SyncRolesAsync(user, request.Roles, cancellationToken);
 
         await userRepository.SaveChangesAsync(cancellationToken);
@@ -178,6 +182,31 @@ public sealed class UserService(
         }
     }
 
+    /// <summary>
+    /// Vendors must belong to an existing company. Choosing a company requires it to be active;
+    /// keeping a vendor on a company that was later deactivated is allowed.
+    /// </summary>
+    private async Task<Company?> ResolveVendorCompanyAsync(
+        IReadOnlyCollection<string> roles,
+        long? companyId,
+        long? currentCompanyId,
+        CancellationToken cancellationToken)
+    {
+        if (!roles.Contains(RoleNames.Vendor, StringComparer.OrdinalIgnoreCase) || companyId is null)
+        {
+            return null;
+        }
+
+        var company = await userRepository.GetCompanyAsync(companyId.Value, cancellationToken)
+            ?? throw new CompanyNotFoundException();
+        if (!company.IsActive && company.Id != currentCompanyId)
+        {
+            throw new ValidationException("The selected company is inactive.");
+        }
+
+        return company;
+    }
+
     private async Task<IReadOnlyList<Role>> LoadRolesAsync(
         IReadOnlyCollection<string> requestedRoles,
         CancellationToken cancellationToken)
@@ -207,6 +236,8 @@ public sealed class UserService(
                 .ToArray(),
             user.IsActive,
             user.LastLoginAt,
-            user.CreatedAt);
+            user.CreatedAt,
+            user.CompanyId,
+            user.Company?.Name);
     }
 }

@@ -44,6 +44,7 @@ public sealed class UserRepository(RekrutDbContext context) : IUserRepository
             .Take(pageSize)
             .Include(user => user.UserRoles)
                 .ThenInclude(link => link.Role)
+            .Include(user => user.Company)
             .ToListAsync(cancellationToken);
         return (users, totalCount);
     }
@@ -54,6 +55,7 @@ public sealed class UserRepository(RekrutDbContext context) : IUserRepository
             .IgnoreQueryFilters()
             .Include(user => user.UserRoles)
                 .ThenInclude(link => link.Role)
+            .Include(user => user.Company)
             .SingleOrDefaultAsync(user => user.Id == id && !user.IsDeleted, cancellationToken);
     }
 
@@ -63,6 +65,7 @@ public sealed class UserRepository(RekrutDbContext context) : IUserRepository
             .AsNoTracking()
             .Include(user => user.UserRoles)
                 .ThenInclude(link => link.Role)
+            .Include(user => user.Company)
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
     }
 
@@ -98,6 +101,9 @@ public sealed class UserRepository(RekrutDbContext context) : IUserRepository
             .Select(user => new RecruiterOption(user.Id, user.FullName, user.Email))
             .ToListAsync(cancellationToken);
     }
+
+    public Task<Company?> GetCompanyAsync(long companyId, CancellationToken cancellationToken = default) =>
+        context.Companies.SingleOrDefaultAsync(company => company.Id == companyId, cancellationToken);
 
     public async Task AddAsync(User user, CancellationToken cancellationToken = default)
     {

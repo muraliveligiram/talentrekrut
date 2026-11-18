@@ -51,6 +51,11 @@ export function useSubmitToJob(candidateId: number) {
   })
 }
 
+export function useRemoveApplication() {
+  const invalidate = useInvalidatePipeline()
+  return useMutation({ mutationFn: (id: number) => api.removeApplication(id), onSuccess: invalidate })
+}
+
 export function useScreenApplication() {
   const invalidate = useInvalidatePipeline()
   return useMutation({

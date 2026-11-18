@@ -16,7 +16,7 @@ TalRekrut is an IT recruitment management system. It lets an agency's **Admins**
 
 ## 3. Scope
 
-**In scope (MVP):** authentication and roles (Admin, Recruiter), user management, companies, jobs (skills, status, recruiter assignment), candidates, the candidate-to-job pipeline, interview scheduling and dashboard metrics.
+**In scope (MVP):** authentication and roles (Admin, Recruiter, Vendor), user management, companies, jobs (skills, status, recruiter assignment), candidates, the candidate-to-job pipeline, interview scheduling and dashboard metrics.
 
 **Out of scope for now:** candidate self-service portal, job-board integrations, email or calendar sync, resume parsing with AI, multi-tenant (multi-agency) support, billing and invoicing.
 
@@ -70,6 +70,14 @@ TalRekrut is an IT recruitment management system. It lets an agency's **Admins**
 - [x] Users page in the frontend; recruiter picker on jobs reuses the same API
 - [x] Users can change their own password
 
+### Vendor access _(done 2026-11-17)_
+- [x] `Vendor` role: a client contact linked to exactly one company (mandatory), not combinable with staff roles
+- [x] Vendors see only their company's jobs that have left Draft, read-only, without internal recruiter assignments
+- [x] Candidate profiles, exports, insights, skills, companies and users are staff-only, enforced by the API
+- [x] Vendors see candidates submitted to their company's jobs, redacted to name, current role, level, stage, interview date, rejection reasons and the timeline; no contact details, date of birth, CTC, employer or internal notes
+- [x] Vendors move those candidates through the workflow (shortlist / not shortlist, schedule or reschedule interview, select / reject); they cannot add or edit candidates or export
+- [ ] When a company is deleted, deactivate its vendor users (agreed, deferred)
+
 ### Skill library _(done 2026-11-16)_
 - [x] Shared skill catalogue with categories; admins and recruiters add skills (bulk or inline from the job form); admins rename, recategorise and deactivate
 - [x] Job skills reference the library and are picked with Primary / Secondary / Good-to-have multi-selects; existing free-text job skills migrated into the library
@@ -87,7 +95,8 @@ TalRekrut is an IT recruitment management system. It lets an agency's **Admins**
 - [x] Workflow: Screening → Shortlisted / Not shortlisted → Interview scheduled (reschedulable) → Selected / Rejected, with reasons required on post-interview rejection
 - [x] Timeline of every step, with who, when and notes
 - [x] Pipeline on each job page with stage filters
-- [ ] Interview details beyond the date (round, mode, interviewer) and multiple interview rounds
+- [x] Each job defines its interview process: 1–10 named rounds in order (e.g. Coding test → Face to face → HR discussion)
+- [ ] Track candidates per round (schedule and record an outcome for each of the job's rounds), plus mode and interviewer
 - [ ] Post-selection stages (Offered, Joined, Dropped)
 
 ### Phase 4 — Dashboard and reporting

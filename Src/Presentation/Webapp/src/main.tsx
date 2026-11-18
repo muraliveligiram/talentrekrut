@@ -30,7 +30,8 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      {/* BASE_URL is "/" locally and e.g. "/app/" when built for a virtual path (npm run build:azure). */}
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}>
         <AuthProvider>
           <App />
           <AppToaster />

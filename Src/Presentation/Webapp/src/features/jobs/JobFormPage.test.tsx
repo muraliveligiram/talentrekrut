@@ -43,6 +43,7 @@ function renderJobForm() {
 async function fillBasics(user: ReturnType<typeof userEvent.setup>) {
   await user.selectOptions(screen.getByRole('combobox', { name: 'Company' }), 'Contoso')
   await user.type(screen.getByRole('textbox', { name: /job title/i }), 'Engineer')
+  await user.type(screen.getByRole('textbox', { name: 'Round 1 name' }), 'Technical interview')
 }
 
 describe('JobFormPage', () => {
@@ -84,6 +85,7 @@ describe('JobFormPage', () => {
         { skillId: 1, skillType: 'Primary', minYears: null },
         { skillId: 3, skillType: 'Secondary', minYears: null },
       ],
+      interviewRounds: ['Technical interview'],
     })
   })
 
@@ -97,5 +99,37 @@ describe('JobFormPage', () => {
 
     expect(mocks.createSkills).toHaveBeenCalledWith({ names: ['Kafka'], category: 'Other' })
     expect(await screen.findByRole('button', { name: 'Remove skill Kafka' })).toBeInTheDocument()
+  })
+
+  it('asks for the number of interview rounds and a name for each', async () => {
+    const user = userEvent.setup()
+    renderJobForm()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Company' }), 'Contoso')
+    await user.type(screen.getByRole('textbox', { name: /job title/i }), 'Engineer')
+    await user.type(screen.getByRole('combobox', { name: /primary skills/i }), 'c#{Enter}')
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Number of rounds' }), '3 rounds')
+    expect(screen.getAllByRole('textbox', { name: /^Round \d name/ })).toHaveLength(3)
+
+    await user.type(screen.getByRole('textbox', { name: 'Round 1 name' }), 'Coding')
+    await user.type(screen.getByRole('textbox', { name: 'Round 3 name' }), 'coding')
+    await user.click(screen.getByRole('button', { name: 'Save job' }))
+    expect(await screen.findByText('Name this round.')).toBeInTheDocument()
+    expect(screen.getByText('Each round needs a different name.')).toBeInTheDocument()
+    expect(mocks.mutate).not.toHaveBeenCalled()
+
+    // Quick add fills the first empty round; then fix the duplicate.
+    await user.click(screen.getByRole('button', { name: '+ Face to face' }))
+    await user.clear(screen.getByRole('textbox', { name: 'Round 3 name' }))
+    await user.type(screen.getByRole('textbox', { name: 'Round 3 name' }), 'HR discussion')
+    await user.click(screen.getByRole('button', { name: 'Save job' }))
+
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledTimes(1))
+    expect(mocks.mutate.mock.calls[0][0].interviewRounds).toEqual(['Coding', 'Face to face', 'HR discussion'])
+
+    // Reducing the count drops rounds from the end.
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Number of rounds' }), '2 rounds')
+    expect(screen.queryByRole('textbox', { name: 'Round 3 name' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Round 2 name' })).toHaveValue('Face to face')
   })
 })

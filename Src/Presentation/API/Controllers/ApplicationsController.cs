@@ -1,13 +1,14 @@
 using API.Infrastructure.Exports;
 using Applications.Abstractions;
 using Applications.Contracts;
+using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace API.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = RoleNames.PipelineUsers)]
 [Route("api")]
 public sealed class ApplicationsController(
     IApplicationService applicationService,
@@ -29,6 +30,7 @@ public sealed class ApplicationsController(
     /// Pass the browser's IANA <paramref name="timeZone"/> (e.g. "Asia/Kolkata") so times match the user's clock.
     /// </summary>
     [HttpGet("jobs/{jobId:long}/applications/export")]
+    [Authorize(Roles = RoleNames.Staff)]
     [Produces(CandidateExportWorkbook.ContentType)]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -66,6 +68,16 @@ public sealed class ApplicationsController(
     public async Task<ActionResult<ApplicationResponse>> GetById(long id, CancellationToken cancellationToken)
     {
         return OkOrNotFound(await applicationService.GetByIdAsync(id, cancellationToken));
+    }
+
+    /// <summary>Removes the candidate from this job's pipeline (admins only). The candidate profile is kept.</summary>
+    [HttpDelete("applications/{id:long}")]
+    [Authorize(Roles = RoleNames.Admin)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Remove(long id, CancellationToken cancellationToken)
+    {
+        return await applicationService.RemoveAsync(id, cancellationToken) ? NoContent() : NotFound();
     }
 
     [HttpPost("applications/{id:long}/screening")]
@@ -109,6 +121,7 @@ public sealed class ApplicationsController(
 
     /// <summary>Selections, submission outcomes and per-recruiter activity over the last <paramref name="days"/> days.</summary>
     [HttpGet("applications/insights")]
+    [Authorize(Roles = RoleNames.Staff)]
     [ProducesResponseType(typeof(PipelineInsightsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PipelineInsightsResponse>> GetInsights(
@@ -119,6 +132,7 @@ public sealed class ApplicationsController(
     }
 
     [HttpGet("applications/stats")]
+    [Authorize(Roles = RoleNames.Staff)]
     [ProducesResponseType(typeof(PipelineStatsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PipelineStatsResponse>> GetStats(

@@ -7,7 +7,9 @@ public sealed record UserResponse(
     IReadOnlyList<string> Roles,
     bool IsActive,
     DateTimeOffset? LastLoginAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    long? CompanyId,
+    string? CompanyName);
 
 public sealed class CreateUserRequest
 {
@@ -15,6 +17,8 @@ public sealed class CreateUserRequest
     public string FullName { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = [];
+    /// <summary>Required when <see cref="Roles"/> contains Vendor; must be empty otherwise.</summary>
+    public long? CompanyId { get; set; }
 }
 
 public sealed class UpdateUserRequest
@@ -23,6 +27,8 @@ public sealed class UpdateUserRequest
     public string FullName { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = [];
     public bool IsActive { get; set; } = true;
+    /// <summary>Required when <see cref="Roles"/> contains Vendor; must be empty otherwise.</summary>
+    public long? CompanyId { get; set; }
 }
 
 public sealed class ResetPasswordRequest

@@ -30,7 +30,26 @@ public sealed class ApplicationService(
         }
 
         var applications = await repository.GetApplicationsForJobAsync(jobId, cancellationToken);
-        return applications.Select(ApplicationMapper.ToResponse).ToArray();
+        return applications.Select(ApplicationMapper.For(currentUser.Scope())).ToArray();
+    }
+
+    public async Task<bool> RemoveAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var application = await repository.GetApplicationAsync(id, AccessScope.Unrestricted, cancellationToken);
+        if (application is null)
+        {
+            return false;
+        }
+
+        // Soft delete: the unique (candidate, job) index ignores deleted rows, so the candidate can be submitted again.
+        application.IsDeleted = true;
+        foreach (var change in application.History)
+        {
+            change.IsDeleted = true;
+        }
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<JobCandidateExport?> GetJobExportAsync(long jobId, CancellationToken cancellationToken = default)
@@ -78,13 +97,14 @@ public sealed class ApplicationService(
             job.Status,
             job.Location,
             job.Openings,
+            job.InterviewRounds.OrderBy(round => round.Sequence).Select(round => round.Name).ToArray(),
             rows);
     }
 
     public async Task<ApplicationResponse?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
         var application = await repository.GetApplicationAsync(id, currentUser.Scope(), cancellationToken);
-        return application is null ? null : ApplicationMapper.ToResponse(application);
+        return application is null ? null : ApplicationMapper.For(currentUser.Scope())(application);
     }
 
     public async Task<ApplicationResponse?> ScreenAsync(
@@ -238,7 +258,7 @@ public sealed class ApplicationService(
 
         await repository.SaveChangesAsync(cancellationToken);
         var saved = await repository.GetApplicationAsync(id, currentUser.Scope(), cancellationToken);
-        return ApplicationMapper.ToResponse(saved!);
+        return ApplicationMapper.For(currentUser.Scope())(saved!);
     }
 
     private static string Describe(ApplicationStage stage) => stage switch

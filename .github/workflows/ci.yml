@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
       - run: dotnet restore tests/IntegrationTests/IntegrationTests.csproj
       - run: dotnet build tests/IntegrationTests/IntegrationTests.csproj --no-restore -c Release
       - run: dotnet test tests/IntegrationTests/IntegrationTests.csproj --no-build -c Release
