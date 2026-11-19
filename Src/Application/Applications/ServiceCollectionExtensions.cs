@@ -30,6 +30,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IValidator<ScreeningDecisionRequest>, ScreeningDecisionRequestValidator>();
         services.AddScoped<IValidator<ScheduleInterviewRequest>, ScheduleInterviewRequestValidator>();
         services.AddScoped<IValidator<InterviewOutcomeRequest>, InterviewOutcomeRequestValidator>();
+        services.AddScoped<IValidator<JoiningDateRequest>, JoiningDateRequestValidator>();
+        services.AddScoped<IValidator<JoiningOutcomeRequest>, JoiningOutcomeRequestValidator>();
         services.AddScoped<ISkillService, SkillService>();
         services.AddScoped<IValidator<CreateSkillsRequest>, CreateSkillsRequestValidator>();
         services.AddScoped<IValidator<UpdateSkillRequest>, UpdateSkillRequestValidator>();

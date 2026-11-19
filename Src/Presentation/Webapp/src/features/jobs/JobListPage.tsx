@@ -16,7 +16,7 @@ import { useRoleFlags } from '@/features/auth/useAuth'
 import { useCompanies } from '@/features/companies/useCompanies'
 import { getErrorMessage } from '@/lib/api-error'
 import { useDebouncedValue } from '@/lib/hooks'
-import { formatDate, humanize } from '@/lib/utils'
+import { cn, formatDate, humanize } from '@/lib/utils'
 import { JOB_STATUSES } from './jobStatus'
 import { JobStatusBadge } from './JobStatusBadge'
 import type { JobStatus } from './jobTypes'
@@ -146,6 +146,7 @@ export function JobListPage() {
                   <TableHead className="hidden lg:table-cell">Location</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden text-right sm:table-cell">Openings</TableHead>
+                  <TableHead className="text-right">Candidates</TableHead>
                   {!isVendor && <TableHead className="hidden xl:table-cell">Recruiters</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -153,7 +154,7 @@ export function JobListPage() {
                 {jobsQuery.isLoading
                   ? Array.from({ length: 4 }, (_, index) => (
                       <TableRow key={index}>
-                        <TableCell colSpan={6}>
+                        <TableCell colSpan={7}>
                           <Skeleton className="h-8 w-full" />
                         </TableCell>
                       </TableRow>
@@ -181,6 +182,18 @@ export function JobListPage() {
                           <JobStatusBadge status={job.status} />
                         </TableCell>
                         <TableCell className="hidden text-right tabular-nums sm:table-cell">{job.openings}</TableCell>
+                        <TableCell className="text-right">
+                          <Link
+                            to={`/jobs/${job.id}`}
+                            aria-label={`${job.candidateCount} candidates submitted to ${job.title}`}
+                            className={cn(
+                              'inline-block min-w-8 rounded-md px-2 py-0.5 text-right tabular-nums hover:bg-surface-muted hover:underline',
+                              job.candidateCount === 0 ? 'text-muted' : 'font-medium',
+                            )}
+                          >
+                            {job.candidateCount}
+                          </Link>
+                        </TableCell>
                         {!isVendor && (
                         <TableCell className="hidden xl:table-cell">
                             {job.assignments.length ? (

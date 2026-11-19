@@ -14,6 +14,7 @@ public sealed record ApplicationResponse(
     string JobCode,
     string JobTitle,
     string CompanyName,
+    JobStatus JobStatus,
     ApplicationStage Stage,
     DateTimeOffset SubmittedAt,
     string SubmittedByName,
@@ -21,7 +22,29 @@ public sealed record ApplicationResponse(
     IReadOnlyList<RejectionReason> RejectionReasons,
     // Internal free text. Null for vendors.
     string? RejectionNotes,
-    IReadOnlyList<StageChangeResponse> History);
+    IReadOnlyList<StageChangeResponse> History,
+    // Every round of the job's interview process, with this candidate's progress in each.
+    IReadOnlyList<RoundProgressResponse> Rounds,
+    DateOnly? JoiningDate,
+    IReadOnlyList<NotJoiningReason> NotJoiningReasons,
+    // Internal free text. Null for vendors.
+    string? NotJoiningNotes);
+
+/// <summary>Status of one interview round for a candidate. Upcoming rounds have no record yet.</summary>
+public sealed record RoundProgressResponse(
+    int Sequence,
+    string Name,
+    RoundStatus Status,
+    DateTimeOffset? ScheduledAt,
+    DateTimeOffset? DecidedAt);
+
+public enum RoundStatus
+{
+    Upcoming,
+    Scheduled,
+    Cleared,
+    NotCleared
+}
 
 public sealed record StageChangeResponse(
     long Id,
@@ -30,7 +53,9 @@ public sealed record StageChangeResponse(
     DateTimeOffset ChangedAt,
     string ChangedByName,
     DateTimeOffset? InterviewScheduledAt,
-    string? Notes);
+    string? Notes,
+    string? RoundName,
+    DateOnly? JoiningDate);
 
 public sealed record SubmitToJobRequest(long JobId, string? Notes);
 
@@ -47,10 +72,24 @@ public sealed class ScheduleInterviewRequest
     public string? Notes { get; set; }
 }
 
+/// <summary>Result of the current interview round. Clearing the final round selects the candidate.</summary>
 public sealed class InterviewOutcomeRequest
 {
-    public bool Selected { get; set; }
+    public bool Passed { get; set; }
     public List<RejectionReason> RejectionReasons { get; set; } = [];
+    public string? Notes { get; set; }
+}
+
+public sealed class JoiningDateRequest
+{
+    public DateOnly JoiningDate { get; set; }
+    public string? Notes { get; set; }
+}
+
+public sealed class JoiningOutcomeRequest
+{
+    public bool Joined { get; set; }
+    public List<NotJoiningReason> NotJoiningReasons { get; set; } = [];
     public string? Notes { get; set; }
 }
 
@@ -70,8 +109,11 @@ public sealed record SubmissionOutcomes(
     int Submitted,
     int InProgress,
     int NotShortlisted,
+    // Selected and waiting to join.
     int Selected,
-    int Rejected);
+    int Rejected,
+    int Joined,
+    int NotJoined);
 
 /// <summary>Workflow steps a user performed during the window.</summary>
 public sealed record RecruiterActivity(

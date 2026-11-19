@@ -22,6 +22,65 @@ namespace Repository.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.ApplicationRound", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("JobApplicationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("JobInterviewRoundId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("ScheduledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobInterviewRoundId");
+
+                    b.HasIndex("JobApplicationId", "Sequence")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("ApplicationRounds");
+                });
+
             modelBuilder.Entity("Domain.Entities.ApplicationStageChange", b =>
                 {
                     b.Property<long>("Id")
@@ -55,9 +114,16 @@ namespace Repository.Migrations
                     b.Property<long>("JobApplicationId")
                         .HasColumnType("bigint");
 
+                    b.Property<DateOnly?>("JoiningDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("RoundName")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
 
                     b.Property<int>("ToStage")
                         .HasColumnType("int");
@@ -379,6 +445,17 @@ namespace Repository.Migrations
 
                     b.Property<long>("JobId")
                         .HasColumnType("bigint");
+
+                    b.Property<DateOnly?>("JoiningDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("NotJoiningNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.PrimitiveCollection<string>("NotJoiningReasons")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("RejectionNotes")
                         .HasMaxLength(2000)
@@ -753,6 +830,22 @@ namespace Repository.Migrations
                     b.ToTable("UserRoles");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ApplicationRound", b =>
+                {
+                    b.HasOne("Domain.Entities.JobApplication", "JobApplication")
+                        .WithMany("Rounds")
+                        .HasForeignKey("JobApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.JobInterviewRound", null)
+                        .WithMany()
+                        .HasForeignKey("JobInterviewRoundId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("JobApplication");
+                });
+
             modelBuilder.Entity("Domain.Entities.ApplicationStageChange", b =>
                 {
                     b.HasOne("Domain.Entities.User", "ChangedBy")
@@ -923,6 +1016,8 @@ namespace Repository.Migrations
             modelBuilder.Entity("Domain.Entities.JobApplication", b =>
                 {
                     b.Navigation("History");
+
+                    b.Navigation("Rounds");
                 });
 
             modelBuilder.Entity("Domain.Entities.Role", b =>

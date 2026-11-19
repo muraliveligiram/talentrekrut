@@ -1,5 +1,5 @@
-import { CalendarClock, CircleCheck, CircleX, ThumbsDown, ThumbsUp } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { CalendarCheck, CalendarClock, CircleCheck, CircleX, ThumbsDown, ThumbsUp, UserCheck, UserX } from 'lucide-react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -8,11 +8,26 @@ import { Dialog, DialogClose, DialogContent, DialogFooter } from '@/components/u
 import { Field } from '@/components/ui/field'
 import { Input, Textarea } from '@/components/ui/input'
 import { getErrorMessage } from '@/lib/api-error'
-import type { Application, RejectionReason } from './candidateTypes'
+import {
+  activeRound,
+  NOT_JOINING_REASONS,
+  notJoiningReasonLabels,
+  REJECTION_REASONS,
+  rejectionReasonLabels,
+  type Application,
+  type NotJoiningReason,
+  type RejectionReason,
+} from './candidateTypes'
 import { ReasonPicker } from './ReasonPicker'
-import { useRecordOutcome, useScheduleInterview, useScreenApplication } from './useCandidates'
+import {
+  useRecordJoining,
+  useRecordOutcome,
+  useScheduleInterview,
+  useScreenApplication,
+  useSetJoiningDate,
+} from './useCandidates'
 
-export type WorkflowAction = 'screen' | 'schedule' | 'outcome'
+export type WorkflowAction = 'screen' | 'schedule' | 'outcome' | 'joiningDate' | 'joining'
 
 interface WorkflowDialogProps {
   application: Application | null
@@ -20,33 +35,71 @@ interface WorkflowDialogProps {
   onClose: () => void
 }
 
+function roundLabel(application: Application) {
+  const round = activeRound(application.rounds)
+  return round ? `round ${round.sequence} · ${round.name}` : 'interview'
+}
+
+function dialogTitle(application: Application, action: WorkflowAction) {
+  switch (action) {
+    case 'screen':
+      return 'Screening decision'
+    case 'schedule':
+      return `${application.stage === 'InterviewScheduled' ? 'Reschedule' : 'Schedule'} ${roundLabel(application)}`
+    case 'outcome':
+      return `Result of ${roundLabel(application)}`
+    case 'joiningDate':
+      return application.joiningDate ? 'Change date of joining' : 'Set date of joining'
+    case 'joining':
+      return 'Did the candidate join?'
+  }
+}
+
 /** Opens the right step dialog for an application. Each dialog mounts fresh, so its state resets. */
 export function WorkflowDialog({ application, action, onClose }: WorkflowDialogProps) {
   const open = application !== null && action !== null
-  const subject = application ? `${application.candidateName} · ${application.jobTitle}` : undefined
-  const title =
-    action === 'screen' ? 'Screening decision' : action === 'schedule' ? scheduleTitle(application) : 'Interview outcome'
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       {open && (
-        <DialogContent title={title} description={subject} className="max-w-xl">
+        <DialogContent
+          title={dialogTitle(application, action)}
+          description={`${application.candidateName} · ${application.jobTitle}`}
+          className="max-w-xl"
+        >
           {action === 'screen' && <ScreeningForm application={application} onDone={onClose} />}
           {action === 'schedule' && <ScheduleForm application={application} onDone={onClose} />}
           {action === 'outcome' && <OutcomeForm application={application} onDone={onClose} />}
+          {action === 'joiningDate' && <JoiningDateForm application={application} onDone={onClose} />}
+          {action === 'joining' && <JoiningForm application={application} onDone={onClose} />}
         </DialogContent>
       )}
     </Dialog>
   )
 }
 
-function scheduleTitle(application: Application | null) {
-  return application?.stage === 'InterviewScheduled' ? 'Reschedule interview' : 'Schedule interview'
-}
-
 interface FormProps {
   application: Application
   onDone: () => void
+}
+
+function FormButtons({ submitLabel, pending, tone = 'primary', icon }: {
+  submitLabel: string
+  pending: boolean
+  tone?: 'primary' | 'danger'
+  icon?: ReactNode
+}) {
+  return (
+    <DialogFooter>
+      <DialogClose asChild>
+        <Button variant="outline">Cancel</Button>
+      </DialogClose>
+      <Button type="submit" variant={tone} loading={pending}>
+        {icon}
+        {submitLabel}
+      </Button>
+    </DialogFooter>
+  )
 }
 
 function ScreeningForm({ application, onDone }: FormProps) {
@@ -85,22 +138,23 @@ function ScreeningForm({ application, onDone }: FormProps) {
         value={decision}
         onChange={setDecision}
         choices={[
-          { value: 'shortlist', label: 'Shortlist', description: 'Move on to the interview stage.', icon: ThumbsUp },
+          { value: 'shortlist', label: 'Shortlist', description: 'Move on to the interview rounds.', icon: ThumbsUp },
           { value: 'reject', label: 'Not shortlisted', description: 'Close this application.', icon: ThumbsDown, tone: 'negative' },
         ]}
       />
-      {decision === 'reject' && <ReasonPicker legend="Reasons (optional)" value={reasons} onChange={setReasons} />}
+      {decision === 'reject' && (
+        <ReasonPicker
+          legend="Reasons (optional)"
+          options={REJECTION_REASONS}
+          labels={rejectionReasonLabels}
+          value={reasons}
+          onChange={setReasons}
+        />
+      )}
       <Field label="Notes" hint="Visible in the application timeline.">
         <Textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
       </Field>
-      <DialogFooter>
-        <DialogClose asChild>
-          <Button variant="outline">Cancel</Button>
-        </DialogClose>
-        <Button type="submit" variant={decision === 'reject' ? 'danger' : 'primary'} loading={screen.isPending}>
-          Save decision
-        </Button>
-      </DialogFooter>
+      <FormButtons submitLabel="Save decision" pending={screen.isPending} tone={decision === 'reject' ? 'danger' : 'primary'} />
     </form>
   )
 }
@@ -113,13 +167,14 @@ function toLocalInput(date: Date) {
 
 function ScheduleForm({ application, onDone }: FormProps) {
   const schedule = useScheduleInterview()
+  const isReschedule = application.stage === 'InterviewScheduled'
   const [scheduledAt, setScheduledAt] = useState(() =>
-    application.interviewScheduledAt ? toLocalInput(new Date(application.interviewScheduledAt)) : '',
+    isReschedule && application.interviewScheduledAt ? toLocalInput(new Date(application.interviewScheduledAt)) : '',
   )
   const [notes, setNotes] = useState('')
   const [fieldError, setFieldError] = useState<string>()
   const [error, setError] = useState<string | null>(null)
-  const isReschedule = application.stage === 'InterviewScheduled'
+  const round = activeRound(application.rounds)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -131,7 +186,7 @@ function ScheduleForm({ application, onDone }: FormProps) {
     try {
       await schedule.mutateAsync({ id: application.id, scheduledAt: date.toISOString(), notes: notes.trim() || null })
       toast.success(isReschedule ? 'Interview rescheduled' : 'Interview scheduled', {
-        description: date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
+        description: `${round ? `${round.name} · ` : ''}${date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`,
       })
       onDone()
     } catch (caught) {
@@ -150,50 +205,49 @@ function ScheduleForm({ application, onDone }: FormProps) {
           onChange={(event) => setScheduledAt(event.target.value)}
         />
       </Field>
-      <Field label="Notes" hint="e.g. panel, round, meeting link.">
+      <Field label="Notes" hint="e.g. panel, meeting link, venue.">
         <Textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
       </Field>
-      <DialogFooter>
-        <DialogClose asChild>
-          <Button variant="outline">Cancel</Button>
-        </DialogClose>
-        <Button type="submit" loading={schedule.isPending}>
-          <CalendarClock />
-          {isReschedule ? 'Reschedule' : 'Schedule interview'}
-        </Button>
-      </DialogFooter>
+      <FormButtons
+        submitLabel={isReschedule ? 'Reschedule' : 'Schedule interview'}
+        pending={schedule.isPending}
+        icon={<CalendarClock />}
+      />
     </form>
   )
 }
 
 function OutcomeForm({ application, onDone }: FormProps) {
   const record = useRecordOutcome()
-  const [decision, setDecision] = useState<'select' | 'reject' | null>(null)
+  const [decision, setDecision] = useState<'pass' | 'fail' | null>(null)
   const [reasons, setReasons] = useState<RejectionReason[]>([])
   const [notes, setNotes] = useState('')
   const [reasonError, setReasonError] = useState<string>()
   const [error, setError] = useState<string | null>(null)
+  const round = activeRound(application.rounds)
+  const isFinalRound = !round || round.sequence >= application.rounds.length
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!decision) return setError('Choose whether the candidate was selected or rejected.')
-    if (decision === 'reject' && reasons.length === 0) return setReasonError('Select at least one rejection reason.')
+    if (!decision) return setError('Choose whether the candidate cleared this round.')
+    if (decision === 'fail' && reasons.length === 0) return setReasonError('Select at least one rejection reason.')
     if (reasons.includes('Other') && !notes.trim()) return setReasonError('Describe the reason in the notes when selecting "Other".')
     setReasonError(undefined)
     setError(null)
     try {
-      await record.mutateAsync({
+      const updated = await record.mutateAsync({
         id: application.id,
-        selected: decision === 'select',
-        rejectionReasons: decision === 'reject' ? reasons : [],
+        passed: decision === 'pass',
+        rejectionReasons: decision === 'fail' ? reasons : [],
         notes: notes.trim() || null,
       })
-      toast.success(decision === 'select' ? 'Candidate selected' : 'Candidate rejected', {
-        description: application.candidateName,
-      })
+      toast.success(
+        updated.stage === 'Selected' ? 'Candidate selected' : decision === 'pass' ? 'Round cleared' : 'Candidate rejected',
+        { description: application.candidateName },
+      )
       onDone()
     } catch (caught) {
-      setError(getErrorMessage(caught, 'Unable to record the interview outcome.'))
+      setError(getErrorMessage(caught, 'Unable to record the result.'))
     }
   }
 
@@ -201,31 +255,158 @@ function OutcomeForm({ application, onDone }: FormProps) {
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       {error && <Alert>{error}</Alert>}
       <ChoiceCards
-        legend="How did the interview go?"
+        legend="How did this round go?"
         value={decision}
         onChange={(value) => {
           setDecision(value)
           setReasonError(undefined)
         }}
         choices={[
-          { value: 'select', label: 'Selected', description: 'The candidate cleared the interview.', icon: CircleCheck },
-          { value: 'reject', label: 'Rejected', description: 'Record why the candidate was rejected.', icon: CircleX, tone: 'negative' },
+          {
+            value: 'pass',
+            label: 'Cleared',
+            description: isFinalRound
+              ? 'Final round: the candidate will be marked Selected.'
+              : 'Move on to the next round.',
+            icon: CircleCheck,
+          },
+          { value: 'fail', label: 'Not cleared', description: 'Reject and record why.', icon: CircleX, tone: 'negative' },
         ]}
       />
-      {decision === 'reject' && (
-        <ReasonPicker legend="Rejection reasons" required value={reasons} onChange={setReasons} error={reasonError} />
+      {decision === 'fail' && (
+        <ReasonPicker
+          legend="Rejection reasons"
+          required
+          options={REJECTION_REASONS}
+          labels={rejectionReasonLabels}
+          value={reasons}
+          onChange={setReasons}
+          error={reasonError}
+        />
       )}
       <Field label="Interview feedback">
         <Textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
       </Field>
-      <DialogFooter>
-        <DialogClose asChild>
-          <Button variant="outline">Cancel</Button>
-        </DialogClose>
-        <Button type="submit" variant={decision === 'reject' ? 'danger' : 'primary'} loading={record.isPending}>
-          Save outcome
-        </Button>
-      </DialogFooter>
+      <FormButtons submitLabel="Save result" pending={record.isPending} tone={decision === 'fail' ? 'danger' : 'primary'} />
+    </form>
+  )
+}
+
+function isoDate(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function addDays(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return isoDate(date)
+}
+
+function JoiningDateForm({ application, onDone }: FormProps) {
+  const setJoining = useSetJoiningDate()
+  const [joiningDate, setJoiningDate] = useState(application.joiningDate ?? '')
+  const [notes, setNotes] = useState('')
+  const [fieldError, setFieldError] = useState<string>()
+  const [error, setError] = useState<string | null>(null)
+  const min = addDays(-90)
+  const max = addDays(365)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!joiningDate) return setFieldError('Choose the date of joining.')
+    if (joiningDate < min || joiningDate > max) return setFieldError('Choose a date within the last 90 days or the next year.')
+    setFieldError(undefined)
+    setError(null)
+    try {
+      await setJoining.mutateAsync({ id: application.id, joiningDate, notes: notes.trim() || null })
+      toast.success('Date of joining saved', {
+        description: new Date(`${joiningDate}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }),
+      })
+      onDone()
+    } catch (caught) {
+      setError(getErrorMessage(caught, 'Unable to save the date of joining.'))
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+      {error && <Alert>{error}</Alert>}
+      <Field label="Date of joining" required error={fieldError}>
+        <Input type="date" min={min} max={max} value={joiningDate} onChange={(event) => setJoiningDate(event.target.value)} />
+      </Field>
+      <Field label="Notes" hint="e.g. offer details or onboarding contact.">
+        <Textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </Field>
+      <FormButtons submitLabel="Save date" pending={setJoining.isPending} icon={<CalendarCheck />} />
+    </form>
+  )
+}
+
+function JoiningForm({ application, onDone }: FormProps) {
+  const record = useRecordJoining()
+  const [decision, setDecision] = useState<'joined' | 'notJoined' | null>(null)
+  const [reasons, setReasons] = useState<NotJoiningReason[]>([])
+  const [notes, setNotes] = useState('')
+  const [reasonError, setReasonError] = useState<string>()
+  const [error, setError] = useState<string | null>(null)
+  const joiningDate = application.joiningDate
+    ? new Date(`${application.joiningDate}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' })
+    : null
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!decision) return setError('Choose whether the candidate joined.')
+    if (decision === 'notJoined' && reasons.length === 0) return setReasonError('Select at least one reason for not joining.')
+    if (reasons.includes('Other') && !notes.trim()) return setReasonError('Describe the reason in the notes when selecting "Other".')
+    setReasonError(undefined)
+    setError(null)
+    try {
+      await record.mutateAsync({
+        id: application.id,
+        joined: decision === 'joined',
+        notJoiningReasons: decision === 'notJoined' ? reasons : [],
+        notes: notes.trim() || null,
+      })
+      toast.success(decision === 'joined' ? 'Marked as joined' : 'Marked as not joined', {
+        description: application.candidateName,
+      })
+      onDone()
+    } catch (caught) {
+      setError(getErrorMessage(caught, 'Unable to record the joining status.'))
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+      {error && <Alert>{error}</Alert>}
+      <ChoiceCards
+        legend={joiningDate ? `Expected to join on ${joiningDate}` : 'Joining status'}
+        value={decision}
+        onChange={(value) => {
+          setDecision(value)
+          setReasonError(undefined)
+        }}
+        choices={[
+          { value: 'joined', label: 'Joined', description: 'The candidate has started.', icon: UserCheck },
+          { value: 'notJoined', label: 'Did not join', description: 'Record why they did not join.', icon: UserX, tone: 'negative' },
+        ]}
+      />
+      {decision === 'notJoined' && (
+        <ReasonPicker
+          legend="Reasons for not joining"
+          required
+          options={NOT_JOINING_REASONS}
+          labels={notJoiningReasonLabels}
+          value={reasons}
+          onChange={setReasons}
+          error={reasonError}
+        />
+      )}
+      <Field label="Notes">
+        <Textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </Field>
+      <FormButtons submitLabel="Save" pending={record.isPending} tone={decision === 'notJoined' ? 'danger' : 'primary'} />
     </form>
   )
 }

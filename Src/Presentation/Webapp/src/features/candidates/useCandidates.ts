@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJobs } from '@/features/jobs/jobsApi'
 import * as api from './candidatesApi'
-import type { CandidateFilters, CandidateWriteRequest, RejectionReason } from './candidateTypes'
+import type { CandidateFilters, CandidateWriteRequest, NotJoiningReason, RejectionReason } from './candidateTypes'
 
 export function useCandidates(filters: CandidateFilters, page: number, pageSize: number) {
   return useQuery({
@@ -77,8 +77,33 @@ export function useScheduleInterview() {
 export function useRecordOutcome() {
   const invalidate = useInvalidatePipeline()
   return useMutation({
-    mutationFn: ({ id, ...request }: { id: number; selected: boolean; rejectionReasons: RejectionReason[]; notes: string | null }) =>
+    mutationFn: ({ id, ...request }: { id: number; passed: boolean; rejectionReasons: RejectionReason[]; notes: string | null }) =>
       api.recordOutcome(id, request),
+    onSuccess: invalidate,
+  })
+}
+
+export function useSetJoiningDate() {
+  const invalidate = useInvalidatePipeline()
+  return useMutation({
+    mutationFn: ({ id, ...request }: { id: number; joiningDate: string; notes: string | null }) =>
+      api.setJoiningDate(id, request),
+    onSuccess: invalidate,
+  })
+}
+
+export function useRecordJoining() {
+  const invalidate = useInvalidatePipeline()
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...request
+    }: {
+      id: number
+      joined: boolean
+      notJoiningReasons: NotJoiningReason[]
+      notes: string | null
+    }) => api.recordJoining(id, request),
     onSuccess: invalidate,
   })
 }

@@ -20,7 +20,9 @@ public sealed record JobResponse(
     IReadOnlyList<JobSkillResponse> Skills,
     IReadOnlyList<InterviewRoundResponse> InterviewRounds,
     IReadOnlyList<JobAssignmentResponse> Assignments,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    // Number of candidates submitted to the job (removed applications excluded).
+    int CandidateCount = 0);
 
 public sealed record InterviewRoundResponse(long Id, int Sequence, string Name);
 

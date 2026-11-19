@@ -101,15 +101,51 @@ public sealed class InterviewOutcomeRequestValidator : AbstractValidator<Intervi
         RuleForEach(request => request.RejectionReasons).IsInEnum();
         RuleFor(request => request.RejectionReasons)
             .NotEmpty()
-            .When(request => !request.Selected)
+            .When(request => !request.Passed)
             .WithMessage("Select at least one rejection reason.");
         RuleFor(request => request.RejectionReasons)
             .Empty()
-            .When(request => request.Selected)
-            .WithMessage("Rejection reasons apply only when the candidate is rejected.");
+            .When(request => request.Passed)
+            .WithMessage("Rejection reasons apply only when the candidate does not clear the round.");
         RuleFor(request => request.Notes)
             .NotEmpty()
             .When(request => request.RejectionReasons.Contains(RejectionReason.Other))
+            .WithMessage("Describe the reason when selecting \"Other\".");
+        RuleFor(request => request.Notes).MaximumLength(2000);
+    }
+}
+
+public sealed class JoiningDateRequestValidator : AbstractValidator<JoiningDateRequest>
+{
+    public JoiningDateRequestValidator(TimeProvider timeProvider)
+    {
+        RuleFor(request => request.JoiningDate)
+            .Must(date =>
+            {
+                var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+                return date >= today.AddDays(-90) && date <= today.AddYears(1);
+            })
+            .WithMessage("The joining date must be within the last 90 days or the next year.");
+        RuleFor(request => request.Notes).MaximumLength(2000);
+    }
+}
+
+public sealed class JoiningOutcomeRequestValidator : AbstractValidator<JoiningOutcomeRequest>
+{
+    public JoiningOutcomeRequestValidator()
+    {
+        RuleForEach(request => request.NotJoiningReasons).IsInEnum();
+        RuleFor(request => request.NotJoiningReasons)
+            .NotEmpty()
+            .When(request => !request.Joined)
+            .WithMessage("Select at least one reason for not joining.");
+        RuleFor(request => request.NotJoiningReasons)
+            .Empty()
+            .When(request => request.Joined)
+            .WithMessage("Reasons apply only when the candidate did not join.");
+        RuleFor(request => request.Notes)
+            .NotEmpty()
+            .When(request => request.NotJoiningReasons.Contains(NotJoiningReason.Other))
             .WithMessage("Describe the reason when selecting \"Other\".");
         RuleFor(request => request.Notes).MaximumLength(2000);
     }

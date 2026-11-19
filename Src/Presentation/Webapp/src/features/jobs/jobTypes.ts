@@ -47,6 +47,8 @@ export interface Job {
   interviewRounds: InterviewRound[]
   assignments: JobAssignment[]
   createdAt: string
+  /** Candidates submitted to this job. */
+  candidateCount: number
 }
 
 export interface JobSkillWriteRequest {

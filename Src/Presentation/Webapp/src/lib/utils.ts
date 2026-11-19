@@ -38,7 +38,8 @@ export function formatRelative(value: string | null | undefined, now = Date.now(
 }
 
 /** Splits PascalCase enum values for display, e.g. "OnHold" -> "On hold". */
-export function humanize(value: string) {
+export function humanize(value: string | null | undefined) {
+  if (!value) return ''
   const spaced = value.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }

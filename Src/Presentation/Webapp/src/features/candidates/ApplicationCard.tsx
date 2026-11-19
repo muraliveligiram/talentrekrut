@@ -1,14 +1,52 @@
-import { CalendarClock, ChevronRight, ClipboardCheck, Gavel, UserMinus } from 'lucide-react'
+import { CalendarCheck, CalendarClock, Check, ChevronRight, CircleAlert, ClipboardCheck, Gavel, UserCheck, UserMinus, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { formatDate } from '@/lib/utils'
-import { levelLabels, rejectionReasonLabels, stageLabels, type Application } from './candidateTypes'
+import { JobStatusBadge } from '@/features/jobs/JobStatusBadge'
+import { cn, formatDate } from '@/lib/utils'
+import {
+  ACTIONABLE_STAGES,
+  activeRound,
+  levelLabels,
+  notJoiningReasonLabels,
+  rejectionReasonLabels,
+  stageLabels,
+  type Application,
+  type RoundProgress,
+  type StageChange,
+} from './candidateTypes'
 import { StageBadge } from './StageBadge'
 import type { WorkflowAction } from './WorkflowDialogs'
 import { WorkflowStepper } from './WorkflowStepper'
 
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const dateOnly = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
+
+/** Formats a "yyyy-mm-dd" date in the user's locale without time-zone shifts. */
+function formatIsoDate(value: string) {
+  return dateOnly.format(new Date(`${value}T00:00:00`))
+}
+
+/** Describes a timeline entry, e.g. "Round 2 · Face to face scheduled". */
+function describeChange(change: StageChange) {
+  if (change.fromStage === null) return 'Submitted for screening'
+  if (change.toStage === 'InterviewScheduled') {
+    const verb = change.fromStage === 'InterviewScheduled' ? 'rescheduled' : 'scheduled'
+    return `${change.roundName ?? 'Interview'} ${verb}`
+  }
+  if (change.roundName && change.toStage === 'RoundCleared') return `${change.roundName} cleared`
+  if (change.roundName && change.toStage === 'Rejected') return `${change.roundName} not cleared · Rejected`
+  if (change.roundName && change.toStage === 'Selected') return `${change.roundName} cleared · Selected`
+  if (change.fromStage === 'Selected' && change.toStage === 'Selected') return 'Date of joining set'
+  return stageLabels[change.toStage]
+}
+
+const roundTone: Record<RoundProgress['status'], string> = {
+  Upcoming: 'text-muted',
+  Scheduled: 'text-warning-soft-foreground',
+  Cleared: 'text-success-soft-foreground',
+  NotCleared: 'text-danger',
+}
 
 interface ApplicationCardProps {
   application: Application
@@ -24,6 +62,9 @@ interface ApplicationCardProps {
 export function ApplicationCard({ application, context, onAction, linkToCandidate = true, onRemove }: ApplicationCardProps) {
   const { stage } = application
   const interviewAt = application.interviewScheduledAt ? new Date(application.interviewScheduledAt) : null
+  const round = activeRound(application.rounds)
+  const roundLabel = round ? `round ${round.sequence} · ${round.name}` : 'interview'
+  const reachedRounds = application.rounds.some((item) => item.status !== 'Upcoming')
 
   return (
     <article className="flex flex-col gap-4 rounded-xl border bg-surface p-4 sm:p-5">
@@ -34,8 +75,14 @@ export function ApplicationCard({ application, context, onAction, linkToCandidat
               <Link to={`/jobs/${application.jobId}`} className="truncate font-medium hover:underline">
                 {application.jobTitle}
               </Link>
-              <span className="text-xs text-muted">
-                {application.jobCode} · {application.companyName}
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                <span>
+                  {application.jobCode} · {application.companyName}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="sr-only">Job status:</span>
+                  <JobStatusBadge status={application.jobStatus} />
+                </span>
               </span>
             </>
           ) : (
@@ -58,13 +105,89 @@ export function ApplicationCard({ application, context, onAction, linkToCandidat
         <StageBadge stage={stage} />
       </header>
 
-      <WorkflowStepper stage={stage} />
+      {application.jobStatus && application.jobStatus !== 'Open' && ACTIONABLE_STAGES.includes(stage) && (
+        <p className="flex items-start gap-2 rounded-lg border border-warning-soft-foreground/20 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+          <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span>
+            {application.jobStatus === 'Closed'
+              ? 'This job is closed, but the candidate is still in progress. Close out their application or keep it for records.'
+              : application.jobStatus === 'OnHold'
+                ? 'This job is on hold. The candidate is still in progress.'
+                : 'This job is in draft. The candidate is still in progress.'}
+          </span>
+        </p>
+      )}
+
+      <WorkflowStepper stage={stage} rounds={application.rounds} />
 
       {interviewAt && stage === 'InterviewScheduled' && (
         <p className="flex items-center gap-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
           <CalendarClock aria-hidden className="size-4" />
-          Interview on <span className="font-medium">{dateTime.format(interviewAt)}</span>
+          <span>
+            {round ? `Round ${round.sequence} · ${round.name}` : 'Interview'} on{' '}
+            <span className="font-medium">{dateTime.format(interviewAt)}</span>
+          </span>
         </p>
+      )}
+
+      {reachedRounds && (
+        <ol aria-label="Interview rounds" className="flex flex-col gap-1 text-sm">
+          {application.rounds.map((item) => (
+            <li key={item.sequence} className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className={cn(
+                  'flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
+                  item.status === 'Cleared' && 'bg-success-soft text-success-soft-foreground',
+                  item.status === 'NotCleared' && 'bg-danger-soft text-danger',
+                  item.status === 'Scheduled' && 'bg-warning-soft text-warning-soft-foreground',
+                  item.status === 'Upcoming' && 'bg-surface-muted text-muted',
+                )}
+              >
+                {item.status === 'Cleared' ? <Check className="size-3" /> : item.status === 'NotCleared' ? <X className="size-3" /> : item.sequence}
+              </span>
+              <span className={cn('truncate', item.status === 'Upcoming' && 'text-muted')}>{item.name}</span>
+              <span className={cn('ml-auto shrink-0 text-xs', roundTone[item.status])}>
+                {item.status === 'Cleared'
+                  ? `Cleared${item.decidedAt ? ` · ${dateOnly.format(new Date(item.decidedAt))}` : ''}`
+                  : item.status === 'NotCleared'
+                    ? 'Not cleared'
+                    : item.status === 'Scheduled'
+                      ? item.scheduledAt
+                        ? dateTime.format(new Date(item.scheduledAt))
+                        : 'Scheduled'
+                      : stage === 'Rejected'
+                        ? 'Not reached'
+                        : 'Upcoming'}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {application.joiningDate && (
+        <p
+          className={cn(
+            'flex items-center gap-2 rounded-lg px-3 py-2 text-sm',
+            stage === 'NotJoined' ? 'bg-danger-soft text-danger-soft-foreground' : 'bg-success-soft text-success-soft-foreground',
+          )}
+        >
+          <CalendarCheck aria-hidden className="size-4" />
+          <span>
+            {stage === 'Joined' ? 'Joined on' : stage === 'NotJoined' ? 'Was due to join on' : 'Joining on'}{' '}
+            <span className="font-medium">{formatIsoDate(application.joiningDate)}</span>
+          </span>
+        </p>
+      )}
+
+      {application.notJoiningReasons.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {application.notJoiningReasons.map((reason) => (
+            <Badge key={reason} tone="danger">
+              {notJoiningReasonLabels[reason]}
+            </Badge>
+          ))}
+        </div>
       )}
 
       {application.rejectionReasons.length > 0 && (
@@ -77,7 +200,7 @@ export function ApplicationCard({ application, context, onAction, linkToCandidat
         </div>
       )}
 
-      {(stage === 'Screening' || stage === 'Shortlisted' || stage === 'InterviewScheduled') && (
+      {ACTIONABLE_STAGES.includes(stage) && (
         <div className="flex flex-wrap gap-2">
           {stage === 'Screening' && (
             <Button size="sm" onClick={() => onAction(application, 'screen')}>
@@ -85,21 +208,39 @@ export function ApplicationCard({ application, context, onAction, linkToCandidat
               Screen candidate
             </Button>
           )}
-          {stage === 'Shortlisted' && (
+          {(stage === 'Shortlisted' || stage === 'RoundCleared') && (
             <Button size="sm" onClick={() => onAction(application, 'schedule')}>
               <CalendarClock />
-              Schedule interview
+              <span className="first-letter:uppercase">Schedule {roundLabel}</span>
             </Button>
           )}
           {stage === 'InterviewScheduled' && (
             <>
               <Button size="sm" onClick={() => onAction(application, 'outcome')}>
                 <Gavel />
-                Record outcome
+                Record result
               </Button>
               <Button size="sm" variant="outline" onClick={() => onAction(application, 'schedule')}>
                 <CalendarClock />
                 Reschedule
+              </Button>
+            </>
+          )}
+          {stage === 'Selected' && (
+            <>
+              {application.joiningDate && (
+                <Button size="sm" onClick={() => onAction(application, 'joining')}>
+                  <UserCheck />
+                  Record joining
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant={application.joiningDate ? 'outline' : 'primary'}
+                onClick={() => onAction(application, 'joiningDate')}
+              >
+                <CalendarCheck />
+                {application.joiningDate ? 'Change joining date' : 'Set date of joining'}
               </Button>
             </>
           )}
@@ -116,15 +257,12 @@ export function ApplicationCard({ application, context, onAction, linkToCandidat
             <li key={change.id} className="relative">
               <span aria-hidden className="absolute top-1.5 -left-[21px] size-2 rounded-full bg-border ring-2 ring-surface" />
               <p className="text-sm">
-                <span className="font-medium">
-                  {change.fromStage === null
-                    ? 'Submitted for screening'
-                    : change.fromStage === change.toStage
-                      ? 'Interview rescheduled'
-                      : stageLabels[change.toStage]}
-                </span>
+                <span className="font-medium">{describeChange(change)}</span>
                 {change.interviewScheduledAt && (
                   <span className="text-muted"> · for {dateTime.format(new Date(change.interviewScheduledAt))}</span>
+                )}
+                {change.joiningDate && change.toStage === 'Selected' && (
+                  <span className="text-muted"> · {formatIsoDate(change.joiningDate)}</span>
                 )}
               </p>
               <p className="text-xs text-muted">

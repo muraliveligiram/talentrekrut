@@ -33,6 +33,10 @@ public interface IJobRepository
     Task<IReadOnlyDictionary<long, Skill>> GetSkillsAsync(
         IReadOnlyCollection<long> skillIds,
         CancellationToken cancellationToken = default);
+    /// <summary>Submitted-candidate counts for the given jobs; jobs without candidates are omitted.</summary>
+    Task<IReadOnlyDictionary<long, int>> GetCandidateCountsAsync(
+        IReadOnlyCollection<long> jobIds,
+        CancellationToken cancellationToken = default);
     Task AddAsync(Job job, CancellationToken cancellationToken = default);
     Task AddAssignmentAsync(JobAssignment assignment, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);

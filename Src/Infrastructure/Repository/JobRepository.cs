@@ -163,6 +163,18 @@ public sealed class JobRepository(RekrutDbContext context) : IJobRepository
             .ToDictionaryAsync(skill => skill.Id, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<long, int>> GetCandidateCountsAsync(
+        IReadOnlyCollection<long> jobIds,
+        CancellationToken cancellationToken = default)
+    {
+        return await context.JobApplications
+            .AsNoTracking()
+            .Where(application => jobIds.Contains(application.JobId))
+            .GroupBy(application => application.JobId)
+            .Select(group => new { JobId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.JobId, row => row.Count, cancellationToken);
+    }
+
     public async Task AddAsync(Job job, CancellationToken cancellationToken = default)
     {
         await context.Jobs.AddAsync(job, cancellationToken);

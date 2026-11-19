@@ -29,8 +29,9 @@ public sealed class JobService(
             pageSize,
             cancellationToken);
 
+        var counts = await jobRepository.GetCandidateCountsAsync(jobs.Select(job => job.Id).ToArray(), cancellationToken);
         return new PagedResult<JobResponse>(
-            jobs.Select(ToVisibleResponse).ToArray(),
+            jobs.Select(job => ToVisibleResponse(job) with { CandidateCount = counts.GetValueOrDefault(job.Id) }).ToArray(),
             page,
             pageSize,
             totalCount);
@@ -39,7 +40,13 @@ public sealed class JobService(
     public async Task<JobResponse?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
         var job = await jobRepository.GetByIdAsync(id, currentUserService.Scope(), cancellationToken);
-        return job is null ? null : ToVisibleResponse(job);
+        if (job is null)
+        {
+            return null;
+        }
+
+        var counts = await jobRepository.GetCandidateCountsAsync([job.Id], cancellationToken);
+        return ToVisibleResponse(job) with { CandidateCount = counts.GetValueOrDefault(job.Id) };
     }
 
     public async Task<JobResponse> CreateAsync(

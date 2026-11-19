@@ -28,7 +28,7 @@ vi.mock('@/features/candidates/candidatesApi', () => ({
     from: '2026-09-17T00:00:00Z',
     to: '2026-11-16T00:00:00Z',
     selectedCount: 4,
-    outcomes: { submitted: 10, inProgress: 3, notShortlisted: 4, selected: 2, rejected: 1 },
+    outcomes: { submitted: 10, inProgress: 3, notShortlisted: 4, selected: 2, rejected: 1, joined: 0, notJoined: 0 },
     recruiters: [
       { userId: 2, name: 'Riya Recruiter', processed: 8, submitted: 6, shortlisted: 3, notShortlisted: 3, selected: 2, rejected: 0 },
       { userId: 1, name: 'Ada Admin', processed: 2, submitted: 0, shortlisted: 1, notShortlisted: 1, selected: 1, rejected: 1 },
@@ -75,7 +75,7 @@ describe('DashboardPage', () => {
     const notShortlisted = screen.getByRole('meter', { name: 'Not shortlisted' })
     expect(notShortlisted).toHaveAttribute('aria-valuenow', '4')
     expect(notShortlisted).toHaveAttribute('aria-valuetext', expect.stringContaining('4 of 10'))
-    expect(screen.getByRole('meter', { name: 'Selected' })).toHaveAttribute('aria-valuenow', '2')
+    expect(screen.getByRole('meter', { name: 'Selected, joining pending' })).toHaveAttribute('aria-valuenow', '2')
 
     const rows = screen.getAllByRole('row').slice(1)
     expect(within(rows[0]).getByText('Riya Recruiter')).toBeInTheDocument()

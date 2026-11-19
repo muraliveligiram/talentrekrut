@@ -14,7 +14,7 @@ var app = builder.Build();
 // Elsewhere, Database:ApplyMigrations and Database:SeedData control what runs (both default to true).
 if (!app.Environment.IsEnvironment("Testing"))
 {
-    await app.Services.InitializeDatabaseAsync(builder.Configuration);
+   // await app.Services.InitializeDatabaseAsync(builder.Configuration);
 }
 
 app.UseApiMiddlewares();

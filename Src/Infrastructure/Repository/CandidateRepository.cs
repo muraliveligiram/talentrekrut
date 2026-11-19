@@ -11,7 +11,7 @@ namespace Repository;
 public sealed class CandidateRepository(RekrutDbContext context) : ICandidateRepository
 {
     private static readonly ApplicationStage[] ActiveStages =
-        [ApplicationStage.Screening, ApplicationStage.Shortlisted, ApplicationStage.InterviewScheduled];
+        [ApplicationStage.Screening, ApplicationStage.Shortlisted, ApplicationStage.InterviewScheduled, ApplicationStage.RoundCleared];
 
     public async Task<(IReadOnlyList<Candidate> Items, int TotalCount)> GetPageAsync(
         string? search,
@@ -70,6 +70,11 @@ public sealed class CandidateRepository(RekrutDbContext context) : ICandidateRep
                     .ThenInclude(job => job.Company)
             .Include(candidate => candidate.Applications)
                 .ThenInclude(application => application.SubmittedBy)
+            .Include(candidate => candidate.Applications)
+                .ThenInclude(application => application.Job)
+                    .ThenInclude(job => job.InterviewRounds)
+            .Include(candidate => candidate.Applications)
+                .ThenInclude(application => application.Rounds)
             .Include(candidate => candidate.Applications)
                 .ThenInclude(application => application.History)
                     .ThenInclude(change => change.ChangedBy)
@@ -213,6 +218,9 @@ public sealed class CandidateRepository(RekrutDbContext context) : ICandidateRep
         .Include(application => application.Candidate)
         .Include(application => application.Job)
             .ThenInclude(job => job.Company)
+        .Include(application => application.Job)
+            .ThenInclude(job => job.InterviewRounds)
+        .Include(application => application.Rounds)
         .Include(application => application.SubmittedBy)
         .Include(application => application.History)
             .ThenInclude(change => change.ChangedBy)

@@ -14,5 +14,10 @@ public sealed class JobApplication : BaseEntity
     public DateTimeOffset? InterviewScheduledAt { get; set; }
     public List<RejectionReason> RejectionReasons { get; set; } = [];
     public string? RejectionNotes { get; set; }
+    public ICollection<ApplicationRound> Rounds { get; set; } = new List<ApplicationRound>();
+    /// <summary>The agreed date of joining, set once the candidate is selected.</summary>
+    public DateOnly? JoiningDate { get; set; }
+    public List<NotJoiningReason> NotJoiningReasons { get; set; } = [];
+    public string? NotJoiningNotes { get; set; }
     public ICollection<ApplicationStageChange> History { get; set; } = new List<ApplicationStageChange>();
 }

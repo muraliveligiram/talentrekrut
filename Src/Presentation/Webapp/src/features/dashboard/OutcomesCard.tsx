@@ -11,9 +11,11 @@ interface OutcomesCardProps {
 }
 
 const rows: { key: keyof Omit<SubmissionOutcomes, 'submitted'>; label: string }[] = [
-  { key: 'selected', label: 'Selected' },
+  { key: 'joined', label: 'Joined' },
+  { key: 'selected', label: 'Selected, joining pending' },
+  { key: 'notJoined', label: 'Selected but did not join' },
   { key: 'notShortlisted', label: 'Not shortlisted' },
-  { key: 'rejected', label: 'Rejected after interview' },
+  { key: 'rejected', label: 'Rejected in interviews' },
   { key: 'inProgress', label: 'Still in progress' },
 ]
 

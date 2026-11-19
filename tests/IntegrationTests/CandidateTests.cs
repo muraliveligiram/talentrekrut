@@ -46,7 +46,7 @@ public sealed class CandidateTests
         Assert.Equal(secondSlot.ToUnixTimeSeconds(), rescheduled.InterviewScheduledAt!.Value.ToUnixTimeSeconds());
 
         var selected = await env.PostAsync<ApplicationResponse>(env.Recruiter,
-            $"/api/applications/{application.Id}/outcome", new { Selected = true });
+            $"/api/applications/{application.Id}/outcome", new { Passed = true });
         Assert.Equal(ApplicationStage.Selected, selected.Stage);
         Assert.Equal(
             [ApplicationStage.Screening, ApplicationStage.Shortlisted, ApplicationStage.InterviewScheduled,
@@ -76,7 +76,7 @@ public sealed class CandidateTests
 
         var id = interviewed.Applications[0].Id;
         Assert.Equal(HttpStatusCode.Conflict, (await env.Send(env.Admin, HttpMethod.Post,
-            $"/api/applications/{id}/outcome", new { Selected = true })).StatusCode);
+            $"/api/applications/{id}/outcome", new { Passed = true })).StatusCode);
         await env.PostAsync<ApplicationResponse>(env.Admin, $"/api/applications/{id}/screening", new { Shortlisted = true });
         Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Post,
             $"/api/applications/{id}/interview", new { ScheduledAt = DateTimeOffset.UtcNow.AddHours(-1) })).StatusCode);
@@ -84,13 +84,13 @@ public sealed class CandidateTests
             $"/api/applications/{id}/interview", new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(1) });
 
         Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Post,
-            $"/api/applications/{id}/outcome", new { Selected = false })).StatusCode);
+            $"/api/applications/{id}/outcome", new { Passed = false })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Post,
-            $"/api/applications/{id}/outcome", new { Selected = false, RejectionReasons = new[] { "Other" } })).StatusCode);
+            $"/api/applications/{id}/outcome", new { Passed = false, RejectionReasons = new[] { "Other" } })).StatusCode);
 
         var rejected = await env.PostAsync<ApplicationResponse>(env.Admin, $"/api/applications/{id}/outcome", new
         {
-            Selected = false,
+            Passed = false,
             RejectionReasons = new[] { "SkillMismatch", "CtcExpectationTooHigh" },
             Notes = "Weak on system design"
         });
@@ -238,7 +238,7 @@ public sealed class CandidateTests
         await env.PostAsync<ApplicationResponse>(env.Admin, $"/api/applications/{rejected.Applications[0].Id}/interview", new { ScheduledAt = interviewAt });
         await env.PostAsync<ApplicationResponse>(env.Admin, $"/api/applications/{rejected.Applications[0].Id}/outcome", new
         {
-            Selected = false,
+            Passed = false,
             RejectionReasons = new[] { "SkillMismatch", "NoticePeriodTooLong" }
         });
 
@@ -308,23 +308,23 @@ public sealed class CandidateTests
         // R1: recruiter shortlists, schedules; admin selects.
         await Step(env.Recruiter, r1.Applications[0].Id, "screening", new { Shortlisted = true });
         await Step(env.Recruiter, r1.Applications[0].Id, "interview", new { ScheduledAt = soon });
-        await Step(env.Admin, r1.Applications[0].Id, "outcome", new { Selected = true });
+        await Step(env.Admin, r1.Applications[0].Id, "outcome", new { Passed = true });
         // R2: recruiter marks not shortlisted.
         await Step(env.Recruiter, r2.Applications[0].Id, "screening", new { Shortlisted = false });
         // A1: admin shortlists, interviews, rejects.
         await Step(env.Admin, a1.Applications[0].Id, "screening", new { Shortlisted = true });
         await Step(env.Admin, a1.Applications[0].Id, "interview", new { ScheduledAt = soon });
-        await Step(env.Admin, a1.Applications[0].Id, "outcome", new { Selected = false, RejectionReasons = new[] { "CulturalFit" } });
+        await Step(env.Admin, a1.Applications[0].Id, "outcome", new { Passed = false, RejectionReasons = new[] { "CulturalFit" } });
         // A2 (admin-only job): selected, but submitted and decided 90 days ago - outside the window.
         await Step(env.Admin, a2.Applications[0].Id, "screening", new { Shortlisted = true });
         await Step(env.Admin, a2.Applications[0].Id, "interview", new { ScheduledAt = soon });
-        await Step(env.Admin, a2.Applications[0].Id, "outcome", new { Selected = true });
+        await Step(env.Admin, a2.Applications[0].Id, "outcome", new { Passed = true });
         await env.BackdateApplicationAsync(a2.Applications[0].Id, days: 90);
 
         var admin = await env.GetAsync<PipelineInsightsResponse>(env.Admin, "/api/applications/insights?days=60");
         Assert.Equal(60, admin.Days);
         Assert.Equal(1, admin.SelectedCount);
-        Assert.Equal(new SubmissionOutcomes(Submitted: 4, InProgress: 1, NotShortlisted: 1, Selected: 1, Rejected: 1), admin.Outcomes);
+        Assert.Equal(new SubmissionOutcomes(Submitted: 4, InProgress: 1, NotShortlisted: 1, Selected: 1, Rejected: 1, Joined: 0, NotJoined: 0), admin.Outcomes);
 
         var recruiterRow = admin.Recruiters.Single(row => row.Name == "Recruiter Rao");
         Assert.Equal(new RecruiterActivity(recruiterRow.UserId, "Recruiter Rao",
@@ -379,6 +379,165 @@ public sealed class CandidateTests
         Assert.Single(fresh.History);
     }
 
+    [Fact]
+    public async Task Candidates_progress_through_each_interview_round_then_join()
+    {
+        await using var env = await Env.CreateAsync();
+        var jobId = await env.CreateOpenJobAsync("Platform Engineer", rounds: ["Coding test", "Face to face", "HR discussion"]);
+        var candidate = await env.CreateCandidateAsync(env.Admin, "Nisha", "nisha@mail.test", "9000000071", jobId);
+        var id = candidate.Applications[0].Id;
+        Assert.Equal(["Coding test", "Face to face", "HR discussion"], candidate.Applications[0].Rounds.Select(round => round.Name));
+        Assert.All(candidate.Applications[0].Rounds, round => Assert.Equal(RoundStatus.Upcoming, round.Status));
+
+        string Url(string action) => $"/api/applications/{id}/{action}";
+        await env.PostAsync<ApplicationResponse>(env.Admin, Url("screening"), new { Shortlisted = true });
+
+        // Round 1: schedule, reschedule, clear.
+        var round1 = await env.PostAsync<ApplicationResponse>(env.Admin, Url("interview"), new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(1) });
+        Assert.Equal(ApplicationStage.InterviewScheduled, round1.Stage);
+        Assert.Equal(RoundStatus.Scheduled, round1.Rounds[0].Status);
+        await env.PostAsync<ApplicationResponse>(env.Admin, Url("interview"), new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(2) });
+        var cleared1 = await env.PostAsync<ApplicationResponse>(env.Admin, Url("outcome"), new { Passed = true, Notes = "Solid coding" });
+        Assert.Equal(ApplicationStage.RoundCleared, cleared1.Stage);
+        Assert.Equal([RoundStatus.Cleared, RoundStatus.Upcoming, RoundStatus.Upcoming], cleared1.Rounds.Select(round => round.Status));
+        Assert.Null(cleared1.InterviewScheduledAt);
+
+        // Joining actions are not available before selection.
+        Assert.Equal(HttpStatusCode.Conflict, (await env.Send(env.Admin, HttpMethod.Post, Url("joining-date"),
+            new { JoiningDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)).ToString("yyyy-MM-dd") })).StatusCode);
+
+        // Rounds 2 and 3.
+        await env.PostAsync<ApplicationResponse>(env.Admin, Url("interview"), new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(3) });
+        Assert.Equal(ApplicationStage.RoundCleared, (await env.PostAsync<ApplicationResponse>(env.Admin, Url("outcome"), new { Passed = true })).Stage);
+        await env.PostAsync<ApplicationResponse>(env.Admin, Url("interview"), new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(4) });
+        var selected = await env.PostAsync<ApplicationResponse>(env.Admin, Url("outcome"), new { Passed = true });
+        Assert.Equal(ApplicationStage.Selected, selected.Stage);
+        Assert.All(selected.Rounds, round => Assert.Equal(RoundStatus.Cleared, round.Status));
+        Assert.Contains(selected.History, change => change.RoundName == "Round 2 · Face to face" && change.ToStage == ApplicationStage.InterviewScheduled);
+        Assert.Contains(selected.History, change => change.RoundName == "Round 1 · Coding test" && change.ToStage == ApplicationStage.RoundCleared);
+
+        // No more rounds to schedule once selected.
+        Assert.Equal(HttpStatusCode.Conflict, (await env.Send(env.Admin, HttpMethod.Post, Url("interview"),
+            new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(5) })).StatusCode);
+
+        // Joining: a date is required first; then joined.
+        Assert.Equal(HttpStatusCode.Conflict, (await env.Send(env.Admin, HttpMethod.Post, Url("joining"), new { Joined = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Post, Url("joining-date"),
+            new { JoiningDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(2)).ToString("yyyy-MM-dd") })).StatusCode);
+        var joiningDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30));
+        var dated = await env.PostAsync<ApplicationResponse>(env.Admin, Url("joining-date"), new { JoiningDate = joiningDate.ToString("yyyy-MM-dd") });
+        Assert.Equal(ApplicationStage.Selected, dated.Stage);
+        Assert.Equal(joiningDate, dated.JoiningDate);
+        var joined = await env.PostAsync<ApplicationResponse>(env.Admin, Url("joining"), new { Joined = true });
+        Assert.Equal(ApplicationStage.Joined, joined.Stage);
+        Assert.Empty(joined.NotJoiningReasons);
+    }
+
+    [Fact]
+    public async Task Failing_a_round_rejects_and_not_joining_requires_reasons()
+    {
+        await using var env = await Env.CreateAsync();
+        var jobId = await env.CreateOpenJobAsync("Data Engineer", rounds: ["Coding test", "Face to face", "HR discussion"]);
+        var failing = await env.CreateCandidateAsync(env.Admin, "Om", "om@mail.test", "9000000081", jobId);
+        var backing = await env.CreateCandidateAsync(env.Admin, "Lata", "lata@mail.test", "9000000082", jobId);
+
+        async Task<ApplicationResponse> Do(long id, string action, object body) =>
+            await env.PostAsync<ApplicationResponse>(env.Admin, $"/api/applications/{id}/{action}", body);
+        async Task ClearAllRounds(long id)
+        {
+            await Do(id, "screening", new { Shortlisted = true });
+            for (var round = 0; round < 3; round++)
+            {
+                await Do(id, "interview", new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(round + 1) });
+                await Do(id, "outcome", new { Passed = true });
+            }
+        }
+
+        // Fails round 2: rejected, round 2 not cleared, round 3 never reached.
+        var failId = failing.Applications[0].Id;
+        await Do(failId, "screening", new { Shortlisted = true });
+        await Do(failId, "interview", new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(1) });
+        await Do(failId, "outcome", new { Passed = true });
+        await Do(failId, "interview", new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(2) });
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Post, $"/api/applications/{failId}/outcome", new { Passed = false })).StatusCode);
+        var rejected = await Do(failId, "outcome", new { Passed = false, RejectionReasons = new[] { "SkillMismatch" } });
+        Assert.Equal(ApplicationStage.Rejected, rejected.Stage);
+        Assert.Equal([RoundStatus.Cleared, RoundStatus.NotCleared, RoundStatus.Upcoming], rejected.Rounds.Select(round => round.Status));
+
+        // Selected, but did not join.
+        var backId = backing.Applications[0].Id;
+        await ClearAllRounds(backId);
+        await Do(backId, "joining-date", new { JoiningDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(15)).ToString("yyyy-MM-dd") });
+        var url = $"/api/applications/{backId}/joining";
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Post, url, new { Joined = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.Send(env.Admin, HttpMethod.Post, url, new { Joined = false, NotJoiningReasons = new[] { "Other" } })).StatusCode);
+        var notJoined = await Do(backId, "joining", new
+        {
+            Joined = false,
+            NotJoiningReasons = new[] { "AcceptedAnotherOffer", "CounterOfferFromCurrentEmployer" },
+            Notes = "Took a 40% counter-offer"
+        });
+        Assert.Equal(ApplicationStage.NotJoined, notJoined.Stage);
+        Assert.Equal([NotJoiningReason.AcceptedAnotherOffer, NotJoiningReason.CounterOfferFromCurrentEmployer], notJoined.NotJoiningReasons);
+        Assert.Equal("Took a 40% counter-offer", notJoined.NotJoiningNotes);
+        Assert.Equal(HttpStatusCode.Conflict, (await env.Send(env.Admin, HttpMethod.Post, url, new { Joined = true })).StatusCode);
+
+        // Insights count joining outcomes.
+        var insights = await env.GetAsync<PipelineInsightsResponse>(env.Admin, "/api/applications/insights?days=60");
+        Assert.Equal(1, insights.Outcomes.NotJoined);
+        Assert.Equal(1, insights.Outcomes.Rejected);
+
+        // The export carries rounds and joining details.
+        var export = await env.Send(env.Admin, HttpMethod.Get, $"/api/jobs/{jobId}/applications/export");
+        using var workbook = new XLWorkbook(await export.Content.ReadAsStreamAsync());
+        var sheet = workbook.Worksheet("Candidates");
+        var headers = sheet.Row(1).CellsUsed().Select(cell => cell.GetString()).ToList();
+        var lataRow = Enumerable.Range(2, 2).Single(row => sheet.Cell(row, 1).GetString() == "Lata");
+        Assert.Equal("Did not join", sheet.Cell(lataRow, headers.IndexOf("Stage") + 1).GetString());
+        Assert.Contains("3. HR discussion: Cleared", sheet.Cell(lataRow, headers.IndexOf("Interview rounds") + 1).GetString());
+        Assert.Equal("Accepted another offer, Counter-offer from current employer",
+            sheet.Cell(lataRow, headers.IndexOf("Not joining reasons") + 1).GetString());
+    }
+
+    [Fact]
+    public async Task Interviews_scheduled_before_round_tracking_continue_as_round_one()
+    {
+        await using var env = await Env.CreateAsync();
+        var jobId = await env.CreateOpenJobAsync("Legacy role", rounds: ["Technical", "HR"]);
+        var candidate = await env.CreateCandidateAsync(env.Admin, "Old", "old@mail.test", "9000000091", jobId);
+        var id = candidate.Applications[0].Id;
+        var at = DateTimeOffset.UtcNow.AddDays(1);
+        await env.MakeLegacyInterviewAsync(id, at);
+
+        var cleared = await env.PostAsync<ApplicationResponse>(env.Admin, $"/api/applications/{id}/outcome", new { Passed = true });
+        Assert.Equal(ApplicationStage.RoundCleared, cleared.Stage);
+        Assert.Equal((1, "Technical", RoundStatus.Cleared), (cleared.Rounds[0].Sequence, cleared.Rounds[0].Name, cleared.Rounds[0].Status));
+        Assert.Equal(at.ToUnixTimeSeconds(), cleared.Rounds[0].ScheduledAt!.Value.ToUnixTimeSeconds());
+        Assert.Equal(RoundStatus.Upcoming, cleared.Rounds[1].Status);
+    }
+
+    [Fact]
+    public async Task Jobs_report_submitted_candidates_and_applications_show_the_job_status()
+    {
+        await using var env = await Env.CreateAsync();
+        var busy = await env.CreateOpenJobAsync("Busy role", assignRecruiter: true);
+        var empty = await env.CreateOpenJobAsync("Empty role");
+        var first = await env.CreateCandidateAsync(env.Admin, "First", "first@mail.test", "9000000101", busy);
+        await env.CreateCandidateAsync(env.Admin, "Second", "second@mail.test", "9000000102", busy);
+        var removed = await env.CreateCandidateAsync(env.Admin, "Third", "third@mail.test", "9000000103", busy);
+        await env.Send(env.Admin, HttpMethod.Delete, $"/api/applications/{removed.Applications[0].Id}");
+
+        var page = await env.GetAsync<PagedResult<JobResponse>>(env.Admin, "/api/jobs");
+        Assert.Equal(2, page.Items.Single(job => job.Id == busy).CandidateCount);
+        Assert.Equal(0, page.Items.Single(job => job.Id == empty).CandidateCount);
+        Assert.Equal(2, (await env.GetAsync<JobResponse>(env.Recruiter, $"/api/jobs/{busy}")).CandidateCount);
+
+        Assert.Equal(JobStatus.Open, first.Applications[0].JobStatus);
+        await env.Send(env.Admin, HttpMethod.Patch, $"/api/jobs/{busy}/status", new { Status = "Closed" });
+        var afterClose = await env.GetAsync<CandidateResponse>(env.Admin, $"/api/candidates/{first.Id}");
+        Assert.Equal(JobStatus.Closed, Assert.Single(afterClose.Applications).JobStatus);
+    }
+
     private sealed class Env : IAsyncDisposable
     {
         private readonly TestApiFactory _factory;
@@ -415,7 +574,7 @@ public sealed class CandidateTests
             return env;
         }
 
-        public async Task<long> CreateJobAsync(string title)
+        public async Task<long> CreateJobAsync(string title, string[]? rounds = null)
         {
             var skills = await TestApiFactory.CreateSkillsAsync(Admin, "C#");
             var job = await PostAsync<JsonElement>(Admin, "/api/jobs", new
@@ -427,15 +586,15 @@ public sealed class CandidateTests
                 Openings = 1,
                 EmploymentType = "FullTime",
                 WorkMode = "Hybrid",
-                InterviewRounds = new[] { "Technical interview", "HR discussion" },
+                InterviewRounds = rounds ?? new[] { "Technical interview" },
                 Skills = new[] { new { SkillId = skills["C#"], SkillType = "Primary" } }
             });
             return job.GetProperty("id").GetInt64();
         }
 
-        public async Task<long> CreateOpenJobAsync(string title, bool assignRecruiter = false)
+        public async Task<long> CreateOpenJobAsync(string title, bool assignRecruiter = false, string[]? rounds = null)
         {
-            var jobId = await CreateJobAsync(title);
+            var jobId = await CreateJobAsync(title, rounds);
             var status = await Send(Admin, HttpMethod.Patch, $"/api/jobs/{jobId}/status", new { Status = "Open" });
             Assert.Equal(HttpStatusCode.OK, status.StatusCode);
             if (assignRecruiter)
@@ -481,6 +640,17 @@ public sealed class CandidateTests
             ["linkedInUrl"] = linkedIn ?? "https://www.linkedin.com/in/someone",
             ["notes"] = "Open to relocation"
         };
+
+        /// <summary>Simulates an interview scheduled before per-round tracking existed (no round records).</summary>
+        public async Task MakeLegacyInterviewAsync(long applicationId, DateTimeOffset scheduledAt)
+        {
+            await using var scope = _factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<Repository.RekrutDbContext>();
+            var application = await db.JobApplications.SingleAsync(item => item.Id == applicationId);
+            application.Stage = ApplicationStage.InterviewScheduled;
+            application.InterviewScheduledAt = scheduledAt;
+            await db.SaveChangesAsync();
+        }
 
         /// <summary>Moves an application's submission and every workflow step back in time.</summary>
         public async Task BackdateApplicationAsync(long applicationId, int days)

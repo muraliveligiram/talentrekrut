@@ -18,7 +18,9 @@ public sealed class ApplicationService(
     TimeProvider timeProvider,
     IValidator<ScreeningDecisionRequest> screeningValidator,
     IValidator<ScheduleInterviewRequest> scheduleValidator,
-    IValidator<InterviewOutcomeRequest> outcomeValidator) : IApplicationService
+    IValidator<InterviewOutcomeRequest> outcomeValidator,
+    IValidator<JoiningDateRequest> joiningDateValidator,
+    IValidator<JoiningOutcomeRequest> joiningValidator) : IApplicationService
 {
     public async Task<IReadOnlyList<ApplicationResponse>?> GetForJobAsync(
         long jobId,
@@ -87,7 +89,11 @@ public sealed class ApplicationService(
                 application.RejectionReasons.ToArray(),
                 application.RejectionNotes,
                 application.History.Count == 0 ? application.SubmittedAt : application.History.Max(change => change.ChangedAt),
-                application.Candidate.Notes))
+                application.Candidate.Notes,
+                ApplicationMapper.RoundProgress(application),
+                application.JoiningDate,
+                application.NotJoiningReasons.ToArray(),
+                application.NotJoiningNotes))
             .ToArray();
 
         return new JobCandidateExport(
@@ -113,15 +119,19 @@ public sealed class ApplicationService(
         CancellationToken cancellationToken = default)
     {
         await screeningValidator.ValidateAndThrowAsync(request, cancellationToken);
-        return await TransitionAsync(id, ApplicationStage.Screening, application =>
+        return await TransitionAsync(id, [ApplicationStage.Screening], application =>
         {
             var target = request.Shortlisted ? ApplicationStage.Shortlisted : ApplicationStage.NotShortlisted;
             application.RejectionReasons = request.Shortlisted ? [] : request.RejectionReasons.Distinct().ToList();
             application.RejectionNotes = request.Shortlisted ? null : Blank(request.Notes);
-            return (target, null, request.Notes);
+            return new Step(target, request.Notes);
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Schedules the next interview round (from Shortlisted or RoundCleared) or reschedules the
+    /// current one (from InterviewScheduled). Rounds follow the job's interview process.
+    /// </summary>
     public async Task<ApplicationResponse?> ScheduleInterviewAsync(
         long id,
         ScheduleInterviewRequest request,
@@ -130,27 +140,80 @@ public sealed class ApplicationService(
         await scheduleValidator.ValidateAndThrowAsync(request, cancellationToken);
         return await TransitionAsync(
             id,
-            [ApplicationStage.Shortlisted, ApplicationStage.InterviewScheduled],
+            [ApplicationStage.Shortlisted, ApplicationStage.RoundCleared, ApplicationStage.InterviewScheduled],
             application =>
             {
+                var round = application.Stage == ApplicationStage.InterviewScheduled
+                    ? CurrentRound(application)
+                    : StartNextRound(application);
+                round.ScheduledAt = request.ScheduledAt;
                 application.InterviewScheduledAt = request.ScheduledAt;
-                return (ApplicationStage.InterviewScheduled, request.ScheduledAt, request.Notes);
+                return new Step(ApplicationStage.InterviewScheduled, request.Notes, request.ScheduledAt, RoundLabel(round));
             },
             cancellationToken);
     }
 
+    /// <summary>Records the current round's result. Clearing the final round selects the candidate.</summary>
     public async Task<ApplicationResponse?> RecordOutcomeAsync(
         long id,
         InterviewOutcomeRequest request,
         CancellationToken cancellationToken = default)
     {
         await outcomeValidator.ValidateAndThrowAsync(request, cancellationToken);
-        return await TransitionAsync(id, ApplicationStage.InterviewScheduled, application =>
+        return await TransitionAsync(id, [ApplicationStage.InterviewScheduled], application =>
         {
-            var target = request.Selected ? ApplicationStage.Selected : ApplicationStage.Rejected;
-            application.RejectionReasons = request.Selected ? [] : request.RejectionReasons.Distinct().ToList();
-            application.RejectionNotes = request.Selected ? null : Blank(request.Notes);
-            return (target, null, request.Notes);
+            var round = CurrentRound(application);
+            round.Outcome = request.Passed ? RoundOutcome.Cleared : RoundOutcome.NotCleared;
+            round.DecidedAt = timeProvider.GetUtcNow();
+            application.InterviewScheduledAt = null;
+
+            ApplicationStage target;
+            if (!request.Passed)
+            {
+                target = ApplicationStage.Rejected;
+                application.RejectionReasons = request.RejectionReasons.Distinct().ToList();
+                application.RejectionNotes = Blank(request.Notes);
+            }
+            else
+            {
+                var totalRounds = Math.Max(PlannedRounds(application).Count, round.Sequence);
+                target = round.Sequence >= totalRounds ? ApplicationStage.Selected : ApplicationStage.RoundCleared;
+            }
+
+            return new Step(target, request.Notes, RoundName: RoundLabel(round));
+        }, cancellationToken);
+    }
+
+    public async Task<ApplicationResponse?> SetJoiningDateAsync(
+        long id,
+        JoiningDateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        await joiningDateValidator.ValidateAndThrowAsync(request, cancellationToken);
+        return await TransitionAsync(id, [ApplicationStage.Selected], application =>
+        {
+            application.JoiningDate = request.JoiningDate;
+            return new Step(ApplicationStage.Selected, request.Notes, JoiningDate: request.JoiningDate);
+        }, cancellationToken);
+    }
+
+    public async Task<ApplicationResponse?> RecordJoiningAsync(
+        long id,
+        JoiningOutcomeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        await joiningValidator.ValidateAndThrowAsync(request, cancellationToken);
+        return await TransitionAsync(id, [ApplicationStage.Selected], application =>
+        {
+            if (application.JoiningDate is null)
+            {
+                throw new InvalidStageTransitionException("Set the date of joining before recording whether the candidate joined.");
+            }
+
+            application.NotJoiningReasons = request.Joined ? [] : request.NotJoiningReasons.Distinct().ToList();
+            application.NotJoiningNotes = request.Joined ? null : Blank(request.Notes);
+            var target = request.Joined ? ApplicationStage.Joined : ApplicationStage.NotJoined;
+            return new Step(target, request.Notes, JoiningDate: application.JoiningDate);
         }, cancellationToken);
     }
 
@@ -178,7 +241,9 @@ public sealed class ApplicationService(
             submissions.Count(ApplicationMapper.IsActive),
             submissions.Count(stage => stage == ApplicationStage.NotShortlisted),
             submissions.Count(stage => stage == ApplicationStage.Selected),
-            submissions.Count(stage => stage == ApplicationStage.Rejected));
+            submissions.Count(stage => stage == ApplicationStage.Rejected),
+            submissions.Count(stage => stage == ApplicationStage.Joined),
+            submissions.Count(stage => stage == ApplicationStage.NotJoined));
 
         int Count(IEnumerable<StageEvent> userEvents, ApplicationStage stage) => userEvents
             .Where(change => change.ToStage == stage && change.FromStage != stage)
@@ -218,17 +283,18 @@ public sealed class ApplicationService(
         return new PipelineStatsResponse(active, interviews);
     }
 
-    private Task<ApplicationResponse?> TransitionAsync(
-        long id,
-        ApplicationStage requiredStage,
-        Func<JobApplication, (ApplicationStage Target, DateTimeOffset? InterviewAt, string? Notes)> apply,
-        CancellationToken cancellationToken) =>
-        TransitionAsync(id, [requiredStage], apply, cancellationToken);
+    /// <summary>What a workflow step changes, for the stage and the timeline entry.</summary>
+    private sealed record Step(
+        ApplicationStage Target,
+        string? Notes,
+        DateTimeOffset? InterviewAt = null,
+        string? RoundName = null,
+        DateOnly? JoiningDate = null);
 
     private async Task<ApplicationResponse?> TransitionAsync(
         long id,
         ApplicationStage[] allowedStages,
-        Func<JobApplication, (ApplicationStage Target, DateTimeOffset? InterviewAt, string? Notes)> apply,
+        Func<JobApplication, Step> apply,
         CancellationToken cancellationToken)
     {
         var application = await repository.GetApplicationAsync(id, currentUser.Scope(), cancellationToken);
@@ -244,16 +310,18 @@ public sealed class ApplicationService(
         }
 
         var fromStage = application.Stage;
-        var (target, interviewAt, notes) = apply(application);
-        application.Stage = target;
+        var step = apply(application);
+        application.Stage = step.Target;
         application.History.Add(new ApplicationStageChange
         {
             FromStage = fromStage,
-            ToStage = target,
+            ToStage = step.Target,
             ChangedAt = timeProvider.GetUtcNow(),
             ChangedByUserId = currentUser.RequireUserId(),
-            InterviewScheduledAt = interviewAt,
-            Notes = Blank(notes)
+            InterviewScheduledAt = step.InterviewAt,
+            RoundName = step.RoundName,
+            JoiningDate = step.JoiningDate,
+            Notes = Blank(step.Notes)
         });
 
         await repository.SaveChangesAsync(cancellationToken);
@@ -261,10 +329,58 @@ public sealed class ApplicationService(
         return ApplicationMapper.For(currentUser.Scope())(saved!);
     }
 
+    private static List<JobInterviewRound> PlannedRounds(JobApplication application) =>
+        application.Job.InterviewRounds.Where(round => !round.IsDeleted).OrderBy(round => round.Sequence).ToList();
+
+    private static List<ApplicationRound> RecordedRounds(JobApplication application) =>
+        application.Rounds.Where(round => !round.IsDeleted).OrderBy(round => round.Sequence).ToList();
+
+    /// <summary>Creates the next round from the job's interview process.</summary>
+    private static ApplicationRound StartNextRound(JobApplication application)
+    {
+        var recorded = RecordedRounds(application);
+        var sequence = recorded.Count == 0 ? 1 : recorded[^1].Sequence + 1;
+        var planned = PlannedRounds(application).FirstOrDefault(round => round.Sequence == sequence);
+        if (planned is null && sequence > 1)
+        {
+            throw new InvalidStageTransitionException("All of this job's interview rounds have already been completed.");
+        }
+
+        var round = new ApplicationRound
+        {
+            Sequence = sequence,
+            Name = planned?.Name ?? "Interview",
+            JobInterviewRoundId = planned?.Id
+        };
+        application.Rounds.Add(round);
+        return round;
+    }
+
+    /// <summary>
+    /// The round currently scheduled. Interviews scheduled before rounds existed have no round record,
+    /// so one is created for them as the next round in sequence.
+    /// </summary>
+    private static ApplicationRound CurrentRound(JobApplication application)
+    {
+        var current = RecordedRounds(application).LastOrDefault(round => round.Outcome == RoundOutcome.Scheduled);
+        if (current is not null)
+        {
+            return current;
+        }
+
+        var legacy = StartNextRound(application);
+        legacy.ScheduledAt = application.InterviewScheduledAt;
+        return legacy;
+    }
+
+    private static string RoundLabel(ApplicationRound round) => $"Round {round.Sequence} · {round.Name}";
+
     private static string Describe(ApplicationStage stage) => stage switch
     {
         ApplicationStage.NotShortlisted => "not shortlisted",
         ApplicationStage.InterviewScheduled => "interview scheduled",
+        ApplicationStage.RoundCleared => "round cleared",
+        ApplicationStage.NotJoined => "did not join",
         _ => stage.ToString().ToLowerInvariant()
     };
 

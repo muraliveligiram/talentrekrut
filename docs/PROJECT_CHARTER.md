@@ -96,8 +96,10 @@ TalRekrut is an IT recruitment management system. It lets an agency's **Admins**
 - [x] Timeline of every step, with who, when and notes
 - [x] Pipeline on each job page with stage filters
 - [x] Each job defines its interview process: 1–10 named rounds in order (e.g. Coding test → Face to face → HR discussion)
-- [ ] Track candidates per round (schedule and record an outcome for each of the job's rounds), plus mode and interviewer
-- [ ] Post-selection stages (Offered, Joined, Dropped)
+- [x] Track candidates per round: schedule or reschedule each of the job's rounds and record cleared / not cleared; clearing the final round selects, failing any round rejects
+- [x] After selection: date of joining, then Joined / Did not join with required reasons (accepted another offer, counter-offer, compensation, relocation, personal, health, no response, offer withdrawn, other)
+- [ ] Interview mode and interviewer per round
+- [x] Post-selection tracking: date of joining, Joined / Did not join (an explicit Offered stage is still open)
 
 ### Phase 4 — Dashboard and reporting
 - [x] Live counts: open jobs, active candidates, interviews this week

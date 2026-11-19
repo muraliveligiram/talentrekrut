@@ -20,7 +20,8 @@ public static class CandidateExportWorkbook
         ("Date of birth", 14), ("Phone", 18), ("Personal email", 28), ("Company email", 28), ("LinkedIn", 34),
         ("Current CTC (LPA)", 16), ("Includes variable", 14), ("Variable (LPA)", 14), ("Expected CTC (LPA)", 16),
         ("Notice period (days)", 14), ("Submitted on", 20), ("Submitted by", 20), ("Interview at", 20),
-        ("Rejection reasons", 34), ("Rejection notes", 40), ("Last updated", 20), ("Candidate notes", 50)
+        ("Interview rounds", 48), ("Rejection reasons", 34), ("Rejection notes", 40), ("Joining date", 14),
+        ("Not joining reasons", 34), ("Not joining notes", 40), ("Last updated", 20), ("Candidate notes", 50)
     ];
 
     public static byte[] Build(JobCandidateExport export, TimeZoneInfo timeZone, DateTimeOffset generatedAt)
@@ -67,8 +68,12 @@ public static class CandidateExportWorkbook
                 Local(row.SubmittedAt, timeZone),
                 row.SubmittedByName,
                 row.InterviewScheduledAt is { } interview ? Local(interview, timeZone) : Blank.Value,
+                Text(RoundsSummary(row.Rounds, timeZone)),
                 row.RejectionReasons.Count > 0 ? string.Join(", ", row.RejectionReasons.Select(DisplayNames.Of)) : Blank.Value,
                 Text(row.RejectionNotes),
+                row.JoiningDate is { } joining ? joining.ToDateTime(TimeOnly.MinValue) : Blank.Value,
+                row.NotJoiningReasons.Count > 0 ? string.Join(", ", row.NotJoiningReasons.Select(DisplayNames.Of)) : Blank.Value,
+                Text(row.NotJoiningNotes),
                 Local(row.LastUpdatedAt, timeZone),
                 Text(row.CandidateNotes)
             };
@@ -97,6 +102,7 @@ public static class CandidateExportWorkbook
         }
 
         FormatColumn(sheet, "Date of birth", DateFormat, lastRow);
+        FormatColumn(sheet, "Joining date", DateFormat, lastRow);
         foreach (var header in new[] { "Current CTC (LPA)", "Variable (LPA)", "Expected CTC (LPA)" })
         {
             FormatColumn(sheet, header, LpaFormat, lastRow);
@@ -107,7 +113,7 @@ public static class CandidateExportWorkbook
             FormatColumn(sheet, header, DateTimeFormat, lastRow);
         }
 
-        foreach (var header in new[] { "Rejection notes", "Candidate notes" })
+        foreach (var header in new[] { "Interview rounds", "Rejection notes", "Not joining notes", "Candidate notes" })
         {
             sheet.Column(ColumnOf(header)).Style.Alignment.WrapText = true;
         }
@@ -179,6 +185,16 @@ public static class CandidateExportWorkbook
     }
 
     private static int ColumnOf(string header) => Array.FindIndex(Columns, column => column.Header == header) + 1;
+
+    /// <summary>One line per round, e.g. "1. Coding test: Cleared · 2. Face to face: Scheduled 20-Nov 11:00".</summary>
+    private static string RoundsSummary(IReadOnlyList<RoundProgressResponse> rounds, TimeZoneInfo timeZone) =>
+        string.Join(Environment.NewLine, rounds.Select(round =>
+        {
+            var line = $"{round.Sequence}. {round.Name}: {DisplayNames.Of(round.Status)}";
+            return round is { Status: RoundStatus.Scheduled, ScheduledAt: { } at }
+                ? $"{line} {Local(at, timeZone).ToString("dd-MMM HH:mm", CultureInfo.InvariantCulture)}"
+                : line;
+        }));
 
     private static XLCellValue Text(string? value) =>
         string.IsNullOrWhiteSpace(value) ? Blank.Value : value;

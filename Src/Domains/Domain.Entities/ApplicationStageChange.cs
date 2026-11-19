@@ -11,5 +11,8 @@ public sealed class ApplicationStageChange : BaseEntity
     public long ChangedByUserId { get; set; }
     public User ChangedBy { get; set; } = null!;
     public DateTimeOffset? InterviewScheduledAt { get; set; }
+    /// <summary>The interview round this step relates to, e.g. "Round 2 · Face to face".</summary>
+    public string? RoundName { get; set; }
+    public DateOnly? JoiningDate { get; set; }
     public string? Notes { get; set; }
 }

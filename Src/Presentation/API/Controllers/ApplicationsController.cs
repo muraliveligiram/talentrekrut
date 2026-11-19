@@ -119,6 +119,34 @@ public sealed class ApplicationsController(
         return OkOrNotFound(await applicationService.RecordOutcomeAsync(id, request, cancellationToken));
     }
 
+    /// <summary>Sets or changes the agreed date of joining for a selected candidate.</summary>
+    [HttpPost("applications/{id:long}/joining-date")]
+    [ProducesResponseType(typeof(ApplicationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApplicationResponse>> SetJoiningDate(
+        long id,
+        [FromBody] JoiningDateRequest request,
+        CancellationToken cancellationToken)
+    {
+        return OkOrNotFound(await applicationService.SetJoiningDateAsync(id, request, cancellationToken));
+    }
+
+    /// <summary>Records whether a selected candidate joined; reasons are required when they did not.</summary>
+    [HttpPost("applications/{id:long}/joining")]
+    [ProducesResponseType(typeof(ApplicationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApplicationResponse>> RecordJoining(
+        long id,
+        [FromBody] JoiningOutcomeRequest request,
+        CancellationToken cancellationToken)
+    {
+        return OkOrNotFound(await applicationService.RecordJoiningAsync(id, request, cancellationToken));
+    }
+
     /// <summary>Selections, submission outcomes and per-recruiter activity over the last <paramref name="days"/> days.</summary>
     [HttpGet("applications/insights")]
     [Authorize(Roles = RoleNames.Staff)]

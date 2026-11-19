@@ -28,6 +28,7 @@ public sealed class RekrutDbContext : DbContext
     public DbSet<Candidate> Candidates => Set<Candidate>();
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
     public DbSet<ApplicationStageChange> ApplicationStageChanges => Set<ApplicationStageChange>();
+    public DbSet<ApplicationRound> ApplicationRounds => Set<ApplicationRound>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -185,6 +186,8 @@ public sealed class RekrutDbContext : DbContext
             entity.HasIndex(application => new { application.JobId, application.Stage });
             entity.Property(application => application.RejectionNotes).HasMaxLength(2000);
             entity.PrimitiveCollection(application => application.RejectionReasons);
+            entity.PrimitiveCollection(application => application.NotJoiningReasons);
+            entity.Property(application => application.NotJoiningNotes).HasMaxLength(2000);
             entity.HasOne(application => application.Candidate)
                 .WithMany(candidate => candidate.Applications)
                 .HasForeignKey(application => application.CandidateId)
@@ -200,8 +203,26 @@ public sealed class RekrutDbContext : DbContext
             entity.HasQueryFilter(application => !application.IsDeleted);
         });
 
+        modelBuilder.Entity<ApplicationRound>(entity =>
+        {
+            entity.Property(round => round.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(round => new { round.JobApplicationId, round.Sequence })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasOne(round => round.JobApplication)
+                .WithMany(application => application.Rounds)
+                .HasForeignKey(round => round.JobApplicationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobInterviewRound>()
+                .WithMany()
+                .HasForeignKey(round => round.JobInterviewRoundId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(round => !round.IsDeleted);
+        });
+
         modelBuilder.Entity<ApplicationStageChange>(entity =>
         {
+            entity.Property(change => change.RoundName).HasMaxLength(120);
             entity.Property(change => change.Notes).HasMaxLength(2000);
             entity.HasOne(change => change.JobApplication)
                 .WithMany(application => application.History)

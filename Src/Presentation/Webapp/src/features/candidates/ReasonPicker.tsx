@@ -1,16 +1,18 @@
 import { Checkbox } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { REJECTION_REASONS, rejectionReasonLabels, type RejectionReason } from './candidateTypes'
 
-interface ReasonPickerProps {
-  value: RejectionReason[]
-  onChange: (value: RejectionReason[]) => void
+interface ReasonPickerProps<T extends string> {
+  /** All selectable reasons, in display order. */
+  options: readonly T[]
+  labels: Record<T, string>
+  value: T[]
+  onChange: (value: T[]) => void
   legend: string
   required?: boolean
   error?: string
 }
 
-export function ReasonPicker({ value, onChange, legend, required, error }: ReasonPickerProps) {
+export function ReasonPicker<T extends string>({ options, labels, value, onChange, legend, required, error }: ReasonPickerProps<T>) {
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-1.5 text-sm font-medium">
@@ -18,7 +20,7 @@ export function ReasonPicker({ value, onChange, legend, required, error }: Reaso
         {required && <span aria-hidden className="ml-0.5 text-danger">*</span>}
       </legend>
       <div className="grid gap-2 sm:grid-cols-2">
-        {REJECTION_REASONS.map((reason) => {
+        {options.map((reason) => {
           const checked = value.includes(reason)
           return (
             <label
@@ -34,7 +36,7 @@ export function ReasonPicker({ value, onChange, legend, required, error }: Reaso
                   onChange(event.target.checked ? [...value, reason] : value.filter((item) => item !== reason))
                 }
               />
-              {rejectionReasonLabels[reason]}
+              {labels[reason]}
             </label>
           )
         })}

@@ -195,9 +195,20 @@ public sealed class VendorTests
         var arunId = pipeline.Single(application => application.CandidateName == "Arun").Id;
         await env.PostOk(vendor, $"/api/applications/{priyaId}/screening", new { Shortlisted = true, Notes = "Strong profile" });
         await env.PostOk(vendor, $"/api/applications/{priyaId}/interview", new { ScheduledAt = DateTimeOffset.UtcNow.AddDays(2) });
-        var selected = await env.PostOk(vendor, $"/api/applications/{priyaId}/outcome", new { Selected = true });
+        var selected = await env.PostOk(vendor, $"/api/applications/{priyaId}/outcome", new { Passed = true });
         Assert.Equal(ApplicationStage.Selected, selected.Stage);
         Assert.All(selected.History, change => Assert.Null(change.Notes));
+
+        // Vendors record joining too, but never see internal not-joining notes.
+        await env.PostOk(vendor, $"/api/applications/{priyaId}/joining-date",
+            new { JoiningDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(20)).ToString("yyyy-MM-dd") });
+        var notJoined = await env.PostOk(vendor, $"/api/applications/{priyaId}/joining",
+            new { Joined = false, NotJoiningReasons = new[] { "CompensationMismatch" }, Notes = "Wanted 35 LPA" });
+        Assert.Equal(ApplicationStage.NotJoined, notJoined.Stage);
+        Assert.Equal([NotJoiningReason.CompensationMismatch], notJoined.NotJoiningReasons);
+        Assert.Null(notJoined.NotJoiningNotes);
+        var staffJoining = await env.Admin.GetFromJsonAsync<ApplicationResponse>($"/api/applications/{priyaId}", Json);
+        Assert.Equal("Wanted 35 LPA", staffJoining!.NotJoiningNotes);
         await env.PostOk(vendor, $"/api/applications/{arunId}/screening", new { Shortlisted = false, RejectionReasons = new[] { "SkillMismatch" } });
 
         // Staff see the vendor's actions, including the vendor's note and the full profile.
@@ -273,7 +284,7 @@ public sealed class VendorTests
                 Openings = 1,
                 EmploymentType = "FullTime",
                 WorkMode = "Remote",
-                InterviewRounds = new[] { "Technical interview", "HR discussion" },
+                InterviewRounds = new[] { "Technical interview" },
                 Skills = new[] { new { SkillId = skills["C#"], SkillType = "Primary" } }
             });
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);

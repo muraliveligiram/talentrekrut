@@ -18,6 +18,7 @@ const application = (id: number, name: string, stage: Application['stage']): App
   jobCode: 'JOB-2026-0123',
   jobTitle: 'Backend Engineer',
   companyName: 'Acme',
+  jobStatus: 'Open',
   stage,
   submittedAt: '2026-11-01T10:00:00Z',
   submittedByName: 'Recruiter Rao',
@@ -25,6 +26,10 @@ const application = (id: number, name: string, stage: Application['stage']): App
   rejectionReasons: [],
   rejectionNotes: null,
   history: [],
+  rounds: [],
+  joiningDate: null,
+  notJoiningReasons: [],
+  notJoiningNotes: null,
 })
 
 vi.mock('./useCandidates', () => ({

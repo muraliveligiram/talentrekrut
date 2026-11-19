@@ -6,6 +6,7 @@ import type {
   CandidateFilters,
   CandidatePage,
   CandidateWriteRequest,
+  NotJoiningReason,
   RejectionReason,
 } from './candidateTypes'
 
@@ -63,9 +64,20 @@ export async function scheduleInterview(id: number, request: { scheduledAt: stri
 
 export async function recordOutcome(
   id: number,
-  request: { selected: boolean; rejectionReasons: RejectionReason[]; notes: string | null },
+  request: { passed: boolean; rejectionReasons: RejectionReason[]; notes: string | null },
 ) {
   return (await http.post<Application>(`/applications/${id}/outcome`, request)).data
+}
+
+export async function setJoiningDate(id: number, request: { joiningDate: string; notes: string | null }) {
+  return (await http.post<Application>(`/applications/${id}/joining-date`, request)).data
+}
+
+export async function recordJoining(
+  id: number,
+  request: { joined: boolean; notJoiningReasons: NotJoiningReason[]; notes: string | null },
+) {
+  return (await http.post<Application>(`/applications/${id}/joining`, request)).data
 }
 
 export async function getPipelineStats(from: Date, to: Date) {
@@ -89,8 +101,11 @@ export interface SubmissionOutcomes {
   submitted: number
   inProgress: number
   notShortlisted: number
+  /** Selected and waiting to join. */
   selected: number
   rejected: number
+  joined: number
+  notJoined: number
 }
 
 export interface RecruiterActivity {

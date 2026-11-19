@@ -1,10 +1,21 @@
 import type { BadgeTone } from '@/components/ui/badge'
 import type { PagedResult } from '@/features/companies/companyTypes'
+import type { JobStatus } from '@/features/jobs/jobTypes'
 
 export const LEVELS = ['Entry', 'Junior', 'MidLevel', 'Senior', 'Lead', 'Architect', 'Manager', 'Director'] as const
 export type CandidateLevel = (typeof LEVELS)[number]
 
-export const STAGES = ['Screening', 'Shortlisted', 'NotShortlisted', 'InterviewScheduled', 'Selected', 'Rejected'] as const
+export const STAGES = [
+  'Screening',
+  'Shortlisted',
+  'NotShortlisted',
+  'InterviewScheduled',
+  'RoundCleared',
+  'Selected',
+  'Rejected',
+  'Joined',
+  'NotJoined',
+] as const
 export type ApplicationStage = (typeof STAGES)[number]
 
 export const REJECTION_REASONS = [
@@ -31,13 +42,31 @@ export const levelLabels: Record<CandidateLevel, string> = {
   Director: 'Director',
 }
 
+/** Stages before a candidate is shortlisted (still screening, or screened out). */
+export const PRE_SHORTLIST_STAGES: readonly ApplicationStage[] = ['Screening', 'NotShortlisted']
+
+/** Stages after a candidate is selected (awaiting joining, joined, or did not join). */
+export const POST_SELECTION_STAGES: readonly ApplicationStage[] = ['Selected', 'Joined', 'NotJoined']
+
+/** Stages with a next workflow action; the rest are final. */
+export const ACTIONABLE_STAGES: readonly ApplicationStage[] = [
+  'Screening',
+  'Shortlisted',
+  'RoundCleared',
+  'InterviewScheduled',
+  'Selected',
+]
+
 export const stageLabels: Record<ApplicationStage, string> = {
   Screening: 'Screening',
   Shortlisted: 'Shortlisted',
   NotShortlisted: 'Not shortlisted',
   InterviewScheduled: 'Interview scheduled',
+  RoundCleared: 'Round cleared',
   Selected: 'Selected',
   Rejected: 'Rejected',
+  Joined: 'Joined',
+  NotJoined: 'Did not join',
 }
 
 export const stageTone: Record<ApplicationStage, BadgeTone> = {
@@ -45,8 +74,11 @@ export const stageTone: Record<ApplicationStage, BadgeTone> = {
   Shortlisted: 'primary',
   NotShortlisted: 'danger',
   InterviewScheduled: 'warning',
+  RoundCleared: 'primary',
   Selected: 'success',
   Rejected: 'danger',
+  Joined: 'success',
+  NotJoined: 'danger',
 }
 
 export const rejectionReasonLabels: Record<RejectionReason, string> = {
@@ -59,6 +91,46 @@ export const rejectionReasonLabels: Record<RejectionReason, string> = {
   DidNotAttendInterview: 'Did not attend interview',
   PositionFilled: 'Position already filled',
   Other: 'Other',
+}
+
+export const NOT_JOINING_REASONS = [
+  'AcceptedAnotherOffer',
+  'CounterOfferFromCurrentEmployer',
+  'CompensationMismatch',
+  'RelocationIssues',
+  'PersonalReasons',
+  'HealthReasons',
+  'NoResponse',
+  'OfferWithdrawn',
+  'Other',
+] as const
+export type NotJoiningReason = (typeof NOT_JOINING_REASONS)[number]
+
+export const notJoiningReasonLabels: Record<NotJoiningReason, string> = {
+  AcceptedAnotherOffer: 'Accepted another offer',
+  CounterOfferFromCurrentEmployer: 'Counter-offer from current employer',
+  CompensationMismatch: 'Compensation mismatch',
+  RelocationIssues: 'Relocation issues',
+  PersonalReasons: 'Personal reasons',
+  HealthReasons: 'Health reasons',
+  NoResponse: 'No response / absconded',
+  OfferWithdrawn: 'Offer withdrawn',
+  Other: 'Other',
+}
+
+export type RoundStatus = 'Upcoming' | 'Scheduled' | 'Cleared' | 'NotCleared'
+
+export interface RoundProgress {
+  sequence: number
+  name: string
+  status: RoundStatus
+  scheduledAt: string | null
+  decidedAt: string | null
+}
+
+/** The round to act on next: the scheduled one, else the first upcoming one. */
+export function activeRound(rounds: RoundProgress[]) {
+  return rounds.find((round) => round.status === 'Scheduled') ?? rounds.find((round) => round.status === 'Upcoming')
 }
 
 export const NOTICE_PERIODS = [0, 15, 30, 45, 60, 90, 120] as const
@@ -79,6 +151,8 @@ export interface StageChange {
   changedByName: string
   interviewScheduledAt: string | null
   notes: string | null
+  roundName: string | null
+  joiningDate: string | null
 }
 
 export interface Application {
@@ -93,6 +167,7 @@ export interface Application {
   jobCode: string
   jobTitle: string
   companyName: string
+  jobStatus: JobStatus
   stage: ApplicationStage
   submittedAt: string
   submittedByName: string
@@ -100,6 +175,11 @@ export interface Application {
   rejectionReasons: RejectionReason[]
   rejectionNotes: string | null
   history: StageChange[]
+  rounds: RoundProgress[]
+  joiningDate: string | null
+  notJoiningReasons: NotJoiningReason[]
+  /** Hidden (null) for vendors. */
+  notJoiningNotes: string | null
 }
 
 export interface CandidateSummary {
